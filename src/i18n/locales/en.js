@@ -75,6 +75,7 @@ const en = {
     coordinate_space_screen: "Screen",
     coordinate_space_diagram: "Diagram",
     table_width: "Table width",
+    diagram_font_size: "Diagram font size",
     language: "Language",
     flush_storage: "Flush storage",
     are_you_sure_flush_storage:

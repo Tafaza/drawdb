@@ -22,7 +22,7 @@ export const getModalTitle = (modal) => {
     case MODAL.TABLE_WIDTH:
       return i18n.t("table_width");
     case MODAL.FONT_SIZE:
-      return i18n.t("diagram_font_size", { defaultValue: "Diagram font size" });
+      return i18n.t("diagram_font_size");
     case MODAL.LANGUAGE:
       return i18n.t("language");
     case MODAL.SHARE:
