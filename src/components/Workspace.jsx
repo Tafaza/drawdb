@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, createContext } from "react";
+import { useState, useEffect, useCallback, createContext, useRef } from "react";
 import ControlPanel from "./EditorHeader/ControlPanel";
 import Canvas from "./EditorCanvas/Canvas";
 import { CanvasContextProvider } from "../context/CanvasContext";
@@ -27,6 +27,9 @@ import { isRtl } from "../i18n/utils/rtl";
 import { useSearchParams } from "react-router-dom";
 import { get, SHARE_FILENAME } from "../api/gists";
 import { nanoid } from "nanoid";
+import { CollabProvider } from "../context/CollabContext";
+import CollabStatus from "./Collab/CollabStatus";
+import { useCollab } from "../hooks/useCollab";
 
 export const IdContext = createContext({
   gistId: "",
@@ -69,11 +72,99 @@ export default function WorkSpace() {
   const { undoStack, redoStack, setUndoStack, setRedoStack } = useUndoRedo();
   const { t, i18n } = useTranslation();
   let [searchParams, setSearchParams] = useSearchParams();
+  const collabMode = searchParams.get("mode") === "view" ? "view" : "edit";
+  const collabShareId = gistId || loadedFromGistId || searchParams.get("shareId");
+  const applyingRemoteRef = useRef(false);
+  const collabClientIdRef = useRef(null);
+  if (collabClientIdRef.current === null) {
+    const stored = localStorage.getItem("collabClientId");
+    if (stored) {
+      collabClientIdRef.current = stored;
+    } else {
+      const id = nanoid();
+      localStorage.setItem("collabClientId", id);
+      collabClientIdRef.current = id;
+    }
+  }
   const handleResize = (e) => {
     if (!resize) return;
     const w = isRtl(i18n.language) ? window.innerWidth - e.clientX : e.clientX;
     if (w > SIDEPANEL_MIN_WIDTH) setWidth(w);
   };
+
+  const applyDiagramState = useCallback(
+    (diagram) => {
+      if (!diagram) return;
+      applyingRemoteRef.current = true;
+      setDatabase(diagram.database ?? DB.GENERIC);
+      setTitle(diagram.title ?? "Untitled Diagram");
+      setTables(diagram.tables ?? []);
+      setRelationships(diagram.relationships ?? []);
+      setNotes(diagram.notes ?? []);
+      setAreas(diagram.subjectAreas ?? []);
+      setTasks(diagram.todos ?? []);
+      setTransform(diagram.transform ?? { pan: { x: 0, y: 0 }, zoom: 1 });
+      if (databases[diagram.database ?? DB.GENERIC].hasTypes) {
+        setTypes(diagram.types ?? []);
+      }
+      if (databases[diagram.database ?? DB.GENERIC].hasEnums) {
+        setEnums(diagram.enums ?? []);
+      }
+      setTimeout(() => {
+        applyingRemoteRef.current = false;
+      }, 0);
+    },
+    [
+      setAreas,
+      setDatabase,
+      setNotes,
+      setRelationships,
+      setTables,
+      setTasks,
+      setTitle,
+      setTransform,
+      setTypes,
+      setEnums,
+    ],
+  );
+
+  const handleRemoteOp = useCallback(
+    (message) => {
+      if (!message?.op) return;
+      if (message.clientId && message.clientId === collabClientIdRef.current) return;
+
+      if (message.op.kind === "doc:replace") {
+        applyDiagramState(message.op.diagram);
+      }
+    },
+    [applyDiagramState, collabClientIdRef],
+  );
+
+  const buildDiagramSnapshot = useCallback(() => {
+    return {
+      title,
+      tables,
+      relationships,
+      notes,
+      subjectAreas: areas,
+      database,
+      ...(databases[database].hasTypes && { types }),
+      ...(databases[database].hasEnums && { enums }),
+      todos: tasks,
+      transform,
+    };
+  }, [
+    areas,
+    database,
+    enums,
+    notes,
+    relationships,
+    tables,
+    tasks,
+    title,
+    transform,
+    types,
+  ]);
 
   const save = useCallback(async () => {
     const name = window.name.split(" ");
@@ -460,6 +551,12 @@ export default function WorkSpace() {
   };
 
   useEffect(() => {
+    if (collabMode === "view") {
+      setLayout((prev) => ({ ...prev, readOnly: true }));
+    }
+  }, [collabMode, setLayout]);
+
+  useEffect(() => {
     if (
       tables?.length === 0 &&
       areas?.length === 0 &&
@@ -468,6 +565,8 @@ export default function WorkSpace() {
       tasks?.length === 0
     )
       return;
+
+    if (applyingRemoteRef.current) return;
 
     if (settings.autosave) {
       setSaveState(State.SAVING);
@@ -503,130 +602,171 @@ export default function WorkSpace() {
   }, [load]);
 
   return (
-    <div className="h-full flex flex-col overflow-hidden theme">
-      <IdContext.Provider value={{ gistId, setGistId, version, setVersion }}>
-        <ControlPanel
-          diagramId={id}
-          setDiagramId={setId}
-          title={title}
-          setTitle={setTitle}
-          lastSaved={lastSaved}
-          setLastSaved={setLastSaved}
+    <CollabProvider
+      shareId={collabShareId}
+      mode={collabMode}
+      onRemoteOp={handleRemoteOp}
+    >
+      <div className="h-full flex flex-col overflow-hidden theme">
+        <IdContext.Provider value={{ gistId, setGistId, version, setVersion }}>
+          <div className="flex items-center justify-between px-2">
+            <ControlPanel
+              diagramId={id}
+              setDiagramId={setId}
+              title={title}
+              setTitle={setTitle}
+              lastSaved={lastSaved}
+              setLastSaved={setLastSaved}
+            />
+            <CollabStatus />
+          </div>
+        </IdContext.Provider>
+        <CollabEmitter
+          mode={collabMode}
+          buildSnapshot={buildDiagramSnapshot}
+          applyingRemoteRef={applyingRemoteRef}
         />
-      </IdContext.Provider>
-      <div
-        className="flex h-full overflow-y-auto"
-        onPointerUp={(e) => e.isPrimary && setResize(false)}
-        onPointerLeave={(e) => e.isPrimary && setResize(false)}
-        onPointerMove={(e) => e.isPrimary && handleResize(e)}
-        onPointerDown={(e) => {
-          // Required for onPointerLeave to trigger when a touch pointer leaves
-          // https://stackoverflow.com/a/70976017/1137077
-          e.target.releasePointerCapture(e.pointerId);
-        }}
-        style={isRtl(i18n.language) ? { direction: "rtl" } : {}}
-      >
-        {layout.sidebar && (
-          <SidePanel resize={resize} setResize={setResize} width={width} />
-        )}
-        <div className="relative w-full h-full overflow-hidden">
-          <CanvasContextProvider className="h-full w-full">
-            <Canvas saveState={saveState} setSaveState={setSaveState} />
-          </CanvasContextProvider>
-          {version && (
-            <div className="absolute right-8 top-2 space-x-2">
-              <Button
-                icon={<i className="fa-solid fa-rotate-right mt-0.5"></i>}
-                onClick={() => setShowRestoreModal(true)}
-              >
-                {t("restore_version")}
-              </Button>
-              <Button
-                type="tertiary"
-                onClick={returnToCurrentDiagram}
-                icon={<i className="bi bi-arrow-return-right mt-1"></i>}
-              >
-                {t("return_to_current")}
-              </Button>
-            </div>
+        <div
+          className="flex h-full overflow-y-auto"
+          onPointerUp={(e) => e.isPrimary && setResize(false)}
+          onPointerLeave={(e) => e.isPrimary && setResize(false)}
+          onPointerMove={(e) => e.isPrimary && handleResize(e)}
+          onPointerDown={(e) => {
+            // Required for onPointerLeave to trigger when a touch pointer leaves
+            // https://stackoverflow.com/a/70976017/1137077
+            e.target.releasePointerCapture(e.pointerId);
+          }}
+          style={isRtl(i18n.language) ? { direction: "rtl" } : {}}
+        >
+          {layout.sidebar && (
+            <SidePanel resize={resize} setResize={setResize} width={width} />
           )}
-          {!(layout.sidebar || layout.toolbar || layout.header) && (
-            <div className="fixed right-5 bottom-4">
-              <FloatingControls />
-            </div>
-          )}
-        </div>
-      </div>
-      <Modal
-        centered
-        size="medium"
-        closable={false}
-        hasCancel={false}
-        title={t("pick_db")}
-        okText={t("confirm")}
-        visible={showSelectDbModal}
-        onOk={() => {
-          if (selectedDb === "") return;
-          setDatabase(selectedDb);
-          setShowSelectDbModal(false);
-        }}
-        okButtonProps={{ disabled: selectedDb === "" }}
-      >
-        <div className="grid grid-cols-3 gap-4 place-content-center">
-          {Object.values(databases).map((x) => (
-            <div
-              key={x.name}
-              onClick={() => setSelectedDb(x.label)}
-              className={`space-y-3 p-3 rounded-md border-2 select-none ${
-                settings.mode === "dark"
-                  ? "bg-zinc-700 hover:bg-zinc-600"
-                  : "bg-zinc-100 hover:bg-zinc-200"
-              } ${selectedDb === x.label ? "border-zinc-400" : "border-transparent"}`}
-            >
-              <div className="flex items-center justify-between">
-                <div className="font-semibold">{x.name}</div>
-                {x.beta && (
-                  <Tag size="small" color="light-blue">
-                    Beta
-                  </Tag>
-                )}
+          <div className="relative w-full h-full overflow-hidden">
+            <CanvasContextProvider className="h-full w-full">
+              <Canvas saveState={saveState} setSaveState={setSaveState} />
+            </CanvasContextProvider>
+            {version && (
+              <div className="absolute right-8 top-2 space-x-2">
+                <Button
+                  icon={<i className="fa-solid fa-rotate-right mt-0.5"></i>}
+                  onClick={() => setShowRestoreModal(true)}
+                >
+                  {t("restore_version")}
+                </Button>
+                <Button
+                  type="tertiary"
+                  onClick={returnToCurrentDiagram}
+                  icon={<i className="bi bi-arrow-return-right mt-1"></i>}
+                >
+                  {t("return_to_current")}
+                </Button>
               </div>
-              {x.image && (
-                <img
-                  src={x.image}
-                  className="h-8"
-                  style={{
-                    filter:
-                      "opacity(0.4) drop-shadow(0 0 0 white) drop-shadow(0 0 0 white)",
-                  }}
-                />
-              )}
-              <div className="text-xs">{x.description}</div>
-            </div>
-          ))}
+            )}
+            {!(layout.sidebar || layout.toolbar || layout.header) && (
+              <div className="fixed right-5 bottom-4">
+                <FloatingControls />
+              </div>
+            )}
+          </div>
         </div>
-      </Modal>
-      <Modal
-        visible={showRestoreModal}
-        centered
-        closable
-        onCancel={() => setShowRestoreModal(false)}
-        title={
-          <span className="flex items-center gap-2">
-            <IconAlertTriangle className="text-amber-400" size="extra-large" />{" "}
-            {t("restore_version")}
-          </span>
-        }
-        okText={t("continue")}
-        cancelText={t("cancel")}
-        onOk={() => {
-          setLayout((prev) => ({ ...prev, readOnly: false }));
-          setShowRestoreModal(false);
-          setVersion(null);
-        }}
-      >
-        {t("restore_warning")}
-      </Modal>
-    </div>
+        <Modal
+          centered
+          size="medium"
+          closable={false}
+          hasCancel={false}
+          title={t("pick_db")}
+          okText={t("confirm")}
+          visible={showSelectDbModal}
+          onOk={() => {
+            if (selectedDb === "") return;
+            setDatabase(selectedDb);
+            setShowSelectDbModal(false);
+          }}
+          okButtonProps={{ disabled: selectedDb === "" }}
+        >
+          <div className="grid grid-cols-3 gap-4 place-content-center">
+            {Object.values(databases).map((x) => (
+              <div
+                key={x.name}
+                onClick={() => setSelectedDb(x.label)}
+                className={`space-y-3 p-3 rounded-md border-2 select-none ${
+                  settings.mode === "dark"
+                    ? "bg-zinc-700 hover:bg-zinc-600"
+                    : "bg-zinc-100 hover:bg-zinc-200"
+                } ${selectedDb === x.label ? "border-zinc-400" : "border-transparent"}`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="font-semibold">{x.name}</div>
+                  {x.beta && (
+                    <Tag size="small" color="light-blue">
+                      Beta
+                    </Tag>
+                  )}
+                </div>
+                {x.image && (
+                  <img
+                    src={x.image}
+                    className="h-8"
+                    style={{
+                      filter:
+                        "opacity(0.4) drop-shadow(0 0 0 white) drop-shadow(0 0 0 white)",
+                    }}
+                  />
+                )}
+                <div className="text-xs">{x.description}</div>
+              </div>
+            ))}
+          </div>
+        </Modal>
+        <Modal
+          visible={showRestoreModal}
+          centered
+          closable
+          onCancel={() => setShowRestoreModal(false)}
+          title={
+            <span className="flex items-center gap-2">
+              <IconAlertTriangle className="text-amber-400" size="extra-large" />{" "}
+              {t("restore_version")}
+            </span>
+          }
+          okText={t("continue")}
+          cancelText={t("cancel")}
+          onOk={() => {
+            setLayout((prev) => ({ ...prev, readOnly: false }));
+            setShowRestoreModal(false);
+            setVersion(null);
+          }}
+        >
+          {t("restore_warning")}
+        </Modal>
+      </div>
+    </CollabProvider>
   );
+}
+
+function CollabEmitter({ mode, buildSnapshot, applyingRemoteRef }) {
+  const { enabled, connection, sendOp } = useCollab();
+  const syncTimer = useRef(null);
+
+  useEffect(() => {
+    if (!enabled || mode === "view") return;
+    if (connection !== "open") return;
+    if (applyingRemoteRef.current) {
+      applyingRemoteRef.current = false;
+      return;
+    }
+
+    if (syncTimer.current) clearTimeout(syncTimer.current);
+
+    syncTimer.current = setTimeout(() => {
+      const diagram = buildSnapshot();
+      sendOp({ kind: "doc:replace", diagram });
+    }, 400);
+
+    return () => {
+      if (syncTimer.current) clearTimeout(syncTimer.current);
+    };
+  }, [enabled, connection, mode, buildSnapshot, applyingRemoteRef, sendOp]);
+
+  return null;
 }
