@@ -21,6 +21,8 @@ export const getModalTitle = (modal) => {
       return i18n.t("create_new_diagram");
     case MODAL.TABLE_WIDTH:
       return i18n.t("table_width");
+    case MODAL.FONT_SIZE:
+      return i18n.t("diagram_font_size", { defaultValue: "Diagram font size" });
     case MODAL.LANGUAGE:
       return i18n.t("language");
     case MODAL.SHARE:

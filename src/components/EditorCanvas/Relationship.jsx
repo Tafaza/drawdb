@@ -6,14 +6,13 @@ import { useTranslation } from "react-i18next";
 import { SideSheet } from "@douyinfe/semi-ui";
 import RelationshipInfo from "../EditorSidePanel/RelationshipsTab/RelationshipInfo";
 
-const labelFontSize = 16;
-
 export default function Relationship({ data }) {
   const { settings } = useSettings();
   const { tables } = useDiagram();
   const { layout } = useLayout();
   const { selectedElement, setSelectedElement } = useSelect();
   const { t } = useTranslation();
+  const labelFontSize = settings.diagramFontSize + 2;
 
   const pathValues = useMemo(() => {
     const startTable = tables.find((t) => t.id === data.startTableId);
@@ -185,6 +184,7 @@ export default function Relationship({ data }) {
 }
 
 function CardinalityLabel({ x, y, text, r = 12, padding = 14 }) {
+  const { settings } = useSettings();
   const [textWidth, setTextWidth] = useState(0);
   const textRef = useRef(null);
 
@@ -215,6 +215,7 @@ function CardinalityLabel({ x, y, text, r = 12, padding = 14 }) {
         strokeWidth="0.5"
         textAnchor="middle"
         alignmentBaseline="middle"
+        fontSize={settings.diagramFontSize}
       >
         {text}
       </text>

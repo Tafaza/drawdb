@@ -390,6 +390,7 @@ export default function Note({ data, onPointerDown }) {
         width={width}
         height={data.height}
         onPointerDown={onPointerDown}
+        style={{ fontSize: `${settings.diagramFontSize}px` }}
       >
         <div className="text-gray-900 select-none w-full h-full cursor-move px-3 py-2">
           <div className="flex justify-between gap-1 w-full">

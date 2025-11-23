@@ -39,6 +39,7 @@ import New from "./New";
 import Open from "./Open";
 import Rename from "./Rename";
 import SetTableWidth from "./SetTableWidth";
+import SetDiagramFontSize from "./SetDiagramFontSize";
 import Share from "./Share";
 import { IdContext } from "../../Workspace";
 import { nanoid } from "nanoid";
@@ -370,6 +371,8 @@ export default function Modal({
         }
       case MODAL.TABLE_WIDTH:
         return <SetTableWidth />;
+      case MODAL.FONT_SIZE:
+        return <SetDiagramFontSize />;
       case MODAL.LANGUAGE:
         return (
           <Language

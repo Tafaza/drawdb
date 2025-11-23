@@ -141,6 +141,7 @@ export default function Table({
         height={height}
         className="group drop-shadow-lg rounded-md cursor-move"
         onPointerDown={onPointerDown}
+        style={{ fontSize: `${settings.diagramFontSize}px` }}
       >
         <div
           onDoubleClick={openEditor}

@@ -13,6 +13,7 @@ const defaultSettings = {
   showRelationshipLabels: true,
   tableWidth: tableWidth,
   showDebugCoordinates: false,
+  diagramFontSize: 14,
 };
 
 export const SettingsContext = createContext(defaultSettings);
@@ -21,9 +22,10 @@ export default function SettingsContextProvider({ children }) {
   const [settings, setSettings] = useState(defaultSettings);
 
   useEffect(() => {
-    const settings = localStorage.getItem("settings");
-    if (settings) {
-      setSettings(JSON.parse(settings));
+    const stored = localStorage.getItem("settings");
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      setSettings((prev) => ({ ...prev, ...parsed }));
     }
   }, []);
 

@@ -153,6 +153,7 @@ export default function Area({
         width={data.width > 0 ? data.width : 0}
         height={data.height > 0 ? data.height : 0}
         onPointerDown={onPointerDown}
+        style={{ fontSize: `${settings.diagramFontSize}px` }}
       >
         <div
           className={`w-full h-full p-2 rounded cursor-move border-2 ${

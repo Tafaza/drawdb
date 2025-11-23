@@ -1533,6 +1533,10 @@ export default function ControlPanel({
         function: () =>
           setSettings((prev) => ({ ...prev, autosave: !prev.autosave })),
       },
+      diagram_font_size: {
+        function: () => setModal(MODAL.FONT_SIZE),
+        disabled: layout.readOnly,
+      },
       table_width: {
         function: () => setModal(MODAL.TABLE_WIDTH),
         disabled: layout.readOnly,

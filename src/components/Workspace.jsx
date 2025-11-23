@@ -609,15 +609,17 @@ export default function WorkSpace() {
     >
       <div className="h-full flex flex-col overflow-hidden theme">
         <IdContext.Provider value={{ gistId, setGistId, version, setVersion }}>
-          <div className="flex items-center justify-between px-2">
-            <ControlPanel
-              diagramId={id}
-              setDiagramId={setId}
-              title={title}
-              setTitle={setTitle}
-              lastSaved={lastSaved}
-              setLastSaved={setLastSaved}
-            />
+          <div className="flex items-start justify-between px-2 gap-3">
+            <div className="flex-1 min-w-0">
+              <ControlPanel
+                diagramId={id}
+                setDiagramId={setId}
+                title={title}
+                setTitle={setTitle}
+                lastSaved={lastSaved}
+                setLastSaved={setLastSaved}
+              />
+            </div>
             <CollabStatus />
           </div>
         </IdContext.Provider>
