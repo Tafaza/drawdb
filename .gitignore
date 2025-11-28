@@ -25,3 +25,4 @@ dist-ssr
 .env
 DEPLOY-srv-linux.md
 deploy-linux-container-stuff/
+temp/

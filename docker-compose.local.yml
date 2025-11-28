@@ -16,7 +16,7 @@ services:
     restart: unless-stopped
     environment:
       VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://localhost:5000}
-      VITE_COLLAB_WS_URL: ${VITE_COLLAB_WS_URL:-ws://localhost:4001/collab}
+      VITE_COLLAB_WS_URL: ${VITE_COLLAB_WS_URL:-ws://localhost:4000/collab}
     ports:
       - "3000:80"
     depends_on:
@@ -31,13 +31,13 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
-      COLLAB_PORT: ${COLLAB_PORT:-4001}
+      COLLAB_PORT: ${COLLAB_PORT:-4000}
       PERSIST_BASE_URL: ${PERSIST_BASE_URL:-http://drawdb-server:5000}
       PERSIST_FILENAME: ${PERSIST_FILENAME:-share.json}
       PERSIST_FLUSH_MS: ${PERSIST_FLUSH_MS:-30000}
       PERSIST_OPS_THRESHOLD: ${PERSIST_OPS_THRESHOLD:-50}
     ports:
-      - "${COLLAB_PORT:-4001}:${COLLAB_PORT:-4001}"
+      - "${COLLAB_PORT:-4000}:${COLLAB_PORT:-4000}"
     depends_on:
       - drawdb-server
 

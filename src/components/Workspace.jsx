@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, createContext, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, createContext, useRef } from "react";
 import ControlPanel from "./EditorHeader/ControlPanel";
 import Canvas from "./EditorCanvas/Canvas";
 import { CanvasContextProvider } from "../context/CanvasContext";
