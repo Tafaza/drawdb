@@ -165,6 +165,11 @@ const en = {
     export_image: "Export image",
     create: "Create",
     confirm: "Confirm",
+    tables_to_export: "Choose tables to export",
+    select_tables_to_export: "Pick at least one table.",
+    select_all: "Select all",
+    relationships_filtered_notice:
+      "Relationships connected to unselected tables are omitted.",
     last_modified: "Last modified",
     drag_and_drop_files: "Drag and drop the file here or click to upload.",
     upload_sql_to_generate_diagrams:

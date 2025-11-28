@@ -4,6 +4,7 @@ import {
   Modal as SemiUIModal,
   Spin,
   Toast,
+  Checkbox,
 } from "@douyinfe/semi-ui";
 import { saveAs } from "file-saver";
 import { Parser } from "node-sql-parser";
@@ -51,6 +52,72 @@ const extensionToLanguage = {
   json: "json",
 };
 
+function ExportTableSelector({
+  tables,
+  selectedTableIds,
+  onChange,
+  t,
+  disabled,
+}) {
+  const allSelected =
+    tables.length > 0 && selectedTableIds.length === tables.length;
+  const indeterminate =
+    selectedTableIds.length > 0 && !allSelected && tables.length > 0;
+
+  const toggleTable = (tableId, checked) => {
+    if (checked) {
+      onChange(
+        selectedTableIds.includes(tableId)
+          ? selectedTableIds
+          : [...selectedTableIds, tableId],
+      );
+      return;
+    }
+    onChange(selectedTableIds.filter((id) => id !== tableId));
+  };
+
+  return (
+    <div className="mb-3">
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-semibold">{t("tables_to_export")}</div>
+        <Checkbox
+          aria-label="select all tables"
+          indeterminate={indeterminate}
+          checked={allSelected}
+          disabled={disabled}
+          onChange={(e) =>
+            onChange(
+              e.target.checked ? tables.map((table) => table.id) : [],
+            )
+          }
+        >
+          {allSelected ? t("clear") : t("select_all")}
+        </Checkbox>
+      </div>
+      <div className="text-xs text-gray-600 mt-1">
+        {t("relationships_filtered_notice")}
+      </div>
+      {tables.length === 0 ? (
+        <div className="text-gray-500 text-sm mt-2">{t("no_tables")}</div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2 mt-2">
+          {tables.map((table) => (
+            <Checkbox
+              aria-label={`table ${table.name}`}
+              key={table.id}
+              checked={selectedTableIds.includes(table.id)}
+              disabled={disabled}
+              onChange={(e) => toggleTable(table.id, e.target.checked)}
+            >
+              <span className="truncate">{table.name}</span>
+            </Checkbox>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Modal({
   modal,
   setModal,
@@ -61,6 +128,11 @@ export default function Modal({
   setExportData,
   importDb,
   importFrom,
+  tables = [],
+  selectedTableIds = [],
+  onTableSelectionChange = () => {},
+  onResetExportSelection = () => {},
+  exportSelectionEnabled = false,
 }) {
   const { t, i18n } = useTranslation();
   const { setGistId } = useContext(IdContext);
@@ -336,19 +408,46 @@ export default function Modal({
         );
       case MODAL.CODE:
       case MODAL.IMG:
-        if (exportData.data !== "" || exportData.data) {
+        {
+          const showSelector = modal === MODAL.CODE && exportSelectionEnabled;
+          const hasSelection =
+            !showSelector || selectedTableIds.length > 0;
+          const hasData =
+            hasSelection &&
+            exportData.data !== "" &&
+            exportData.data !== null &&
+            exportData.data !== undefined;
+
           return (
             <>
-              {modal === MODAL.IMG ? (
-                <Image src={exportData.data} alt="Diagram" height={280} />
-              ) : (
-                <CodeEditor
-                  height={360}
-                  value={exportData.data}
-                  language={extensionToLanguage[exportData.extension]}
-                  options={{ readOnly: true }}
-                  showCopyButton={true}
+              {showSelector && (
+                <ExportTableSelector
+                  tables={tables}
+                  selectedTableIds={selectedTableIds}
+                  onChange={onTableSelectionChange}
+                  t={t}
                 />
+              )}
+              {hasData ? (
+                modal === MODAL.IMG ? (
+                  <Image src={exportData.data} alt="Diagram" height={280} />
+                ) : (
+                  <CodeEditor
+                    height={360}
+                    value={exportData.data}
+                    language={extensionToLanguage[exportData.extension]}
+                    options={{ readOnly: true }}
+                    showCopyButton={true}
+                  />
+                )
+              ) : (
+                <div className="text-center my-3 text-sky-600">
+                  {showSelector && selectedTableIds.length === 0 ? (
+                    <div>{t("select_tables_to_export")}</div>
+                  ) : (
+                    <Spin tip={t("loading")} size="large" />
+                  )}
+                </div>
               )}
               <div className="text-sm font-semibold mt-2">{t("filename")}:</div>
               <Input
@@ -361,12 +460,6 @@ export default function Modal({
                 field="filename"
               />
             </>
-          );
-        } else {
-          return (
-            <div className="text-center my-3 text-sky-600">
-              <Spin tip={t("loading")} size="large" />
-            </div>
           );
         }
       case MODAL.TABLE_WIDTH:
@@ -399,6 +492,7 @@ export default function Modal({
           extension: "",
           filename: `${title}_${new Date().toISOString()}`,
         }));
+        onResetExportSelection();
         setError({
           type: STATUS.NONE,
           message: "",

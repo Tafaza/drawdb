@@ -1,4 +1,4 @@
-import { useContext, useState } from "react";
+import { useContext, useRef, useState } from "react";
 import {
   IconCaretdown,
   IconChevronRight,
@@ -102,6 +102,7 @@ export default function ControlPanel({
     filename: `${title}_${new Date().toISOString()}`,
     extension: "",
   });
+  const [selectedExportTableIds, setSelectedExportTableIds] = useState([]);
   const [importFrom, setImportFrom] = useState(IMPORT_FROM.JSON);
   const { saveState, setSaveState } = useSaveState();
   const { layout, setLayout } = useLayout();
@@ -132,6 +133,7 @@ export default function ControlPanel({
   const { t, i18n } = useTranslation();
   const { version, gistId, setGistId } = useContext(IdContext);
   const navigate = useNavigate();
+  const exportBuilderRef = useRef(null);
 
   const invertLayout = (component) =>
     setLayout((prev) => ({ ...prev, [component]: !prev[component] }));
@@ -810,6 +812,77 @@ export default function ControlPanel({
         Toast.error(t("didnt_find_diagram"));
       });
   };
+
+  const filterDiagramByTables = (ids) => {
+    const selectedIdSet = new Set(ids);
+    const filteredTables = tables.filter((table) =>
+      selectedIdSet.has(table.id),
+    );
+    const selectedTableNames = new Set(
+      filteredTables.map((table) => table.name),
+    );
+    const sanitizedTables = filteredTables.map((table) => {
+      if (!Array.isArray(table.inherits) || table.inherits.length === 0)
+        return table;
+
+      const filteredInherits = table.inherits.filter((parent) =>
+        selectedTableNames.has(parent),
+      );
+
+      return filteredInherits.length === table.inherits.length
+        ? table
+        : { ...table, inherits: filteredInherits };
+    });
+    const filteredRelationships = relationships.filter(
+      (relationship) =>
+        selectedIdSet.has(relationship.startTableId) &&
+        selectedIdSet.has(relationship.endTableId),
+    );
+
+    return {
+      tables: sanitizedTables,
+      relationships: filteredRelationships,
+    };
+  };
+
+  const resetExportSelection = () => {
+    setSelectedExportTableIds([]);
+    exportBuilderRef.current = null;
+  };
+
+  const regenerateExportData = (ids) => {
+    if (!exportBuilderRef.current) return;
+    if (ids.length === 0) {
+      setExportData((prev) => ({ ...prev, data: "" }));
+      return;
+    }
+
+    const data = exportBuilderRef.current(ids);
+    setExportData((prev) => ({ ...prev, data }));
+  };
+
+  const startCodeExport = ({ extension, builder }) => {
+    if (tables.length === 0) {
+      Toast.info(t("no_tables"));
+      return;
+    }
+    const initialSelection = tables.map((table) => table.id);
+    exportBuilderRef.current = (ids) => builder(filterDiagramByTables(ids));
+
+    setSelectedExportTableIds(initialSelection);
+    setExportData((prev) => ({
+      ...prev,
+      data: exportBuilderRef.current(initialSelection),
+      extension: extension,
+      filename: `${title}_${new Date().toISOString()}`,
+    }));
+    setModal(MODAL.CODE);
+  };
+
+  const handleExportTableSelectionChange = (ids) => {
+    setSelectedExportTableIds(ids);
+    regenerateExportData(ids);
+  };
   const menu = {
     file: {
       new: {
@@ -997,124 +1070,125 @@ export default function ControlPanel({
           children: [
             {
               name: "MySQL",
-              function: () => {
-                setModal(MODAL.CODE);
-                const src = jsonToMySQL({
-                  tables: tables,
-                  references: relationships,
-                  types: types,
-                  database: database,
-                });
-                setExportData((prev) => ({
-                  ...prev,
-                  data: src,
+              function: () =>
+                startCodeExport({
                   extension: "sql",
-                }));
-              },
+                  builder: ({
+                    tables: exportTables,
+                    relationships: exportRelationships,
+                  }) =>
+                    jsonToMySQL({
+                      tables: exportTables,
+                      references: exportRelationships,
+                      types: types,
+                      database: database,
+                    }),
+                }),
             },
             {
               name: "PostgreSQL",
-              function: () => {
-                setModal(MODAL.CODE);
-                const src = jsonToPostgreSQL({
-                  tables: tables,
-                  references: relationships,
-                  types: types,
-                  database: database,
-                });
-                setExportData((prev) => ({
-                  ...prev,
-                  data: src,
+              function: () =>
+                startCodeExport({
                   extension: "sql",
-                }));
-              },
+                  builder: ({
+                    tables: exportTables,
+                    relationships: exportRelationships,
+                  }) =>
+                    jsonToPostgreSQL({
+                      tables: exportTables,
+                      references: exportRelationships,
+                      types: types,
+                      database: database,
+                    }),
+                }),
             },
             {
               name: "SQLite",
-              function: () => {
-                setModal(MODAL.CODE);
-                const src = jsonToSQLite({
-                  tables: tables,
-                  references: relationships,
-                  types: types,
-                  database: database,
-                });
-                setExportData((prev) => ({
-                  ...prev,
-                  data: src,
+              function: () =>
+                startCodeExport({
                   extension: "sql",
-                }));
-              },
+                  builder: ({
+                    tables: exportTables,
+                    relationships: exportRelationships,
+                  }) =>
+                    jsonToSQLite({
+                      tables: exportTables,
+                      references: exportRelationships,
+                      types: types,
+                      database: database,
+                    }),
+                }),
             },
             {
               name: "MariaDB",
-              function: () => {
-                setModal(MODAL.CODE);
-                const src = jsonToMariaDB({
-                  tables: tables,
-                  references: relationships,
-                  types: types,
-                  database: database,
-                });
-                setExportData((prev) => ({
-                  ...prev,
-                  data: src,
+              function: () =>
+                startCodeExport({
                   extension: "sql",
-                }));
-              },
+                  builder: ({
+                    tables: exportTables,
+                    relationships: exportRelationships,
+                  }) =>
+                    jsonToMariaDB({
+                      tables: exportTables,
+                      references: exportRelationships,
+                      types: types,
+                      database: database,
+                    }),
+                }),
             },
             {
               name: "MSSQL",
-              function: () => {
-                setModal(MODAL.CODE);
-                const src = jsonToSQLServer({
-                  tables: tables,
-                  references: relationships,
-                  types: types,
-                  database: database,
-                });
-                setExportData((prev) => ({
-                  ...prev,
-                  data: src,
+              function: () =>
+                startCodeExport({
                   extension: "sql",
-                }));
-              },
+                  builder: ({
+                    tables: exportTables,
+                    relationships: exportRelationships,
+                  }) =>
+                    jsonToSQLServer({
+                      tables: exportTables,
+                      references: exportRelationships,
+                      types: types,
+                      database: database,
+                    }),
+                }),
             },
             {
               label: "Beta",
               name: "Oracle",
-              function: () => {
-                setModal(MODAL.CODE);
-                const src = jsonToOracleSQL({
-                  tables: tables,
-                  references: relationships,
-                  types: types,
-                  database: database,
-                });
-                setExportData((prev) => ({
-                  ...prev,
-                  data: src,
+              function: () =>
+                startCodeExport({
                   extension: "sql",
-                }));
-              },
+                  builder: ({
+                    tables: exportTables,
+                    relationships: exportRelationships,
+                  }) =>
+                    jsonToOracleSQL({
+                      tables: exportTables,
+                      references: exportRelationships,
+                      types: types,
+                      database: database,
+                    }),
+                }),
             },
           ],
         }),
         function: () => {
           if (database === DB.GENERIC) return;
-          setModal(MODAL.CODE);
-          const src = exportSQL({
-            tables: tables,
-            references: relationships,
-            types: types,
-            database: database,
-            enums: enums,
-          });
-          setExportData((prev) => ({
-            ...prev,
-            data: src,
+          startCodeExport({
             extension: "sql",
-          }));
+            builder: ({
+              tables: exportTables,
+              relationships: exportRelationships,
+            }) =>
+              exportSQL({
+                tables: exportTables,
+                references: exportRelationships,
+                types: types,
+                database: database,
+                enums: enums,
+              }),
+          });
         },
       },
       export_as: {
@@ -1167,45 +1241,45 @@ export default function ControlPanel({
           },
           {
             name: "JSON",
-            function: () => {
-              setModal(MODAL.CODE);
-              const result = JSON.stringify(
-                {
-                  tables: tables,
-                  relationships: relationships,
-                  notes: notes,
-                  subjectAreas: areas,
-                  database: database,
-                  ...(databases[database].hasTypes && { types: types }),
-                  ...(databases[database].hasEnums && { enums: enums }),
-                  title: title,
-                },
-                null,
-                2,
-              );
-              setExportData((prev) => ({
-                ...prev,
-                data: result,
+            function: () =>
+              startCodeExport({
                 extension: "json",
-              }));
-            },
+                builder: ({
+                  tables: exportTables,
+                  relationships: exportRelationships,
+                }) =>
+                  JSON.stringify(
+                    {
+                      tables: exportTables,
+                      relationships: exportRelationships,
+                      notes: notes,
+                      subjectAreas: areas,
+                      database: database,
+                      ...(databases[database].hasTypes && { types: types }),
+                      ...(databases[database].hasEnums && { enums: enums }),
+                      title: title,
+                    },
+                    null,
+                    2,
+                  ),
+              }),
           },
           {
             name: "DBML",
-            function: () => {
-              setModal(MODAL.CODE);
-              const result = toDBML({
-                tables,
-                relationships,
-                enums,
-                database,
-              });
-              setExportData((prev) => ({
-                ...prev,
-                data: result,
+            function: () =>
+              startCodeExport({
                 extension: "dbml",
-              }));
-            },
+                builder: ({
+                  tables: exportTables,
+                  relationships: exportRelationships,
+                }) =>
+                  toDBML({
+                    tables: exportTables,
+                    relationships: exportRelationships,
+                    enums,
+                    database,
+                  }),
+              }),
           },
           {
             name: "PDF",
@@ -1230,43 +1304,43 @@ export default function ControlPanel({
           },
           {
             name: "Mermaid",
-            function: () => {
-              setModal(MODAL.CODE);
-              const result = jsonToMermaid({
-                tables: tables,
-                relationships: relationships,
-                notes: notes,
-                subjectAreas: areas,
-                database: database,
-                title: title,
-              });
-              setExportData((prev) => ({
-                ...prev,
-                data: result,
+            function: () =>
+              startCodeExport({
                 extension: "md",
-              }));
-            },
+                builder: ({
+                  tables: exportTables,
+                  relationships: exportRelationships,
+                }) =>
+                  jsonToMermaid({
+                    tables: exportTables,
+                    relationships: exportRelationships,
+                    notes: notes,
+                    subjectAreas: areas,
+                    database: database,
+                    title: title,
+                  }),
+              }),
           },
           {
             name: "Markdown",
-            function: () => {
-              setModal(MODAL.CODE);
-              const result = jsonToDocumentation({
-                tables: tables,
-                relationships: relationships,
-                notes: notes,
-                subjectAreas: areas,
-                database: database,
-                title: title,
-                ...(databases[database].hasTypes && { types: types }),
-                ...(databases[database].hasEnums && { enums: enums }),
-              });
-              setExportData((prev) => ({
-                ...prev,
-                data: result,
+            function: () =>
+              startCodeExport({
                 extension: "md",
-              }));
-            },
+                builder: ({
+                  tables: exportTables,
+                  relationships: exportRelationships,
+                }) =>
+                  jsonToDocumentation({
+                    tables: exportTables,
+                    relationships: exportRelationships,
+                    notes: notes,
+                    subjectAreas: areas,
+                    database: database,
+                    title: title,
+                    ...(databases[database].hasTypes && { types: types }),
+                    ...(databases[database].hasEnums && { enums: enums }),
+                  }),
+              }),
           },
         ],
         function: () => {},
@@ -1653,6 +1727,11 @@ export default function ControlPanel({
         setModal={setModal}
         importFrom={importFrom}
         importDb={importDb}
+        tables={tables}
+        selectedTableIds={selectedExportTableIds}
+        onTableSelectionChange={handleExportTableSelectionChange}
+        onResetExportSelection={resetExportSelection}
+        exportSelectionEnabled={Boolean(exportBuilderRef.current)}
       />
       <Sidesheet
         type={sidesheet}
