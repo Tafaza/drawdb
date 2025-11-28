@@ -54,6 +54,10 @@ const persistRoom = async (shareId) => {
   const room = rooms.get(shareId);
   if (!room || !room.diagram || !room.dirty) return;
 
+  // Strip viewport before persisting to gist to avoid noisy updates
+  const payloadDiagram = { ...room.diagram };
+  delete payloadDiagram.transform;
+
   try {
     const res = await fetch(`${PERSIST_BASE_URL}/gists/${shareId}`, {
       method: "PATCH",
@@ -62,7 +66,7 @@ const persistRoom = async (shareId) => {
       },
       body: JSON.stringify({
         filename: PERSIST_FILENAME,
-        content: JSON.stringify(room.diagram),
+        content: JSON.stringify(payloadDiagram),
       }),
     });
     if (!res.ok) {

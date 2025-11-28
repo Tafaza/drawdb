@@ -30,6 +30,7 @@ import { nanoid } from "nanoid";
 import { CollabProvider } from "../context/CollabContext";
 import CollabStatus from "./Collab/CollabStatus";
 import { useCollab } from "../hooks/useCollab";
+import CollabModeToggle from "./Collab/CollabModeToggle";
 
 export const IdContext = createContext({
   gistId: "",
@@ -91,6 +92,19 @@ export default function WorkSpace() {
     const w = isRtl(i18n.language) ? window.innerWidth - e.clientX : e.clientX;
     if (w > SIDEPANEL_MIN_WIDTH) setWidth(w);
   };
+
+  const setCollabModeParam = useCallback(
+    (nextMode) => {
+      const params = new URLSearchParams(searchParams);
+      if (nextMode === "view") {
+        params.set("mode", "view");
+      } else {
+        params.delete("mode");
+      }
+      setSearchParams(params, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
 
   const applyDiagramState = useCallback(
     (diagram) => {
@@ -553,10 +567,17 @@ export default function WorkSpace() {
   };
 
   useEffect(() => {
-    if (collabMode === "view") {
-      setLayout((prev) => ({ ...prev, readOnly: true }));
-    }
-  }, [collabMode, setLayout]);
+    setLayout((prev) => {
+      if (collabMode === "view") {
+        return { ...prev, readOnly: true };
+      }
+      // Only release readOnly when not locked by version viewing
+      if (prev.readOnly && !version) {
+        return { ...prev, readOnly: false };
+      }
+      return prev;
+    });
+  }, [collabMode, setLayout, version]);
 
   useEffect(() => {
     if (
@@ -623,7 +644,10 @@ export default function WorkSpace() {
               />
             </div>
             <div className="absolute right-2 top-1">
-              <CollabStatus />
+              <div className="flex items-center gap-2">
+                <CollabModeToggle mode={collabMode} onChange={setCollabModeParam} />
+                <CollabStatus />
+              </div>
             </div>
           </div>
         </IdContext.Provider>
