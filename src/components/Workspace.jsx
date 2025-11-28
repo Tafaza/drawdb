@@ -73,7 +73,12 @@ export default function WorkSpace() {
   const { undoStack, redoStack, setUndoStack, setRedoStack } = useUndoRedo();
   const { t, i18n } = useTranslation();
   let [searchParams, setSearchParams] = useSearchParams();
-  const collabMode = searchParams.get("mode") === "view" ? "view" : "edit";
+  const [collabMode, setCollabMode] = useState(() => {
+    const paramMode = searchParams.get("mode");
+    if (paramMode === "view") return "view";
+    const stored = localStorage.getItem("collabMode");
+    return stored === "view" ? "view" : "edit";
+  });
   const collabShareId = gistId || loadedFromGistId || searchParams.get("shareId");
   const applyingRemoteRef = useRef(false);
   const collabClientIdRef = useRef(null);
@@ -101,6 +106,8 @@ export default function WorkSpace() {
       } else {
         params.delete("mode");
       }
+      setCollabMode(nextMode);
+      localStorage.setItem("collabMode", nextMode);
       setSearchParams(params, { replace: true });
     },
     [searchParams, setSearchParams],
@@ -565,6 +572,23 @@ export default function WorkSpace() {
     setLayout((prev) => ({ ...prev, readOnly: false }));
     setVersion(null);
   };
+
+  useEffect(() => {
+    const paramMode = searchParams.get("mode");
+    if (paramMode === "view") {
+      if (collabMode !== "view") {
+        setCollabMode("view");
+        localStorage.setItem("collabMode", "view");
+      }
+      return;
+    }
+
+    const stored = localStorage.getItem("collabMode");
+    const next = stored === "view" ? "view" : "edit";
+    if (collabMode !== next) {
+      setCollabMode(next);
+    }
+  }, [searchParams, collabMode]);
 
   useEffect(() => {
     setLayout((prev) => {
