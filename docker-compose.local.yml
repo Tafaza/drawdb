@@ -1,0 +1,62 @@
+version: "3.9"
+
+# Local full-stack setup (frontend + collab + backend).
+# Assumes this repo lives in a folder alongside a clone of drawdb-server:
+#   ~/dev/drawdb-stack/
+#     ├─ drawdb/          (this repo)
+#     └─ drawdb-server/   (backend repo)
+#
+# Edit defaults via a .env file in this directory if needed.
+services:
+  drawdb-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: drawdb-frontend
+    restart: unless-stopped
+    environment:
+      VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://localhost:5000}
+      VITE_COLLAB_WS_URL: ${VITE_COLLAB_WS_URL:-ws://localhost:4001/collab}
+    ports:
+      - "3000:80"
+    depends_on:
+      - drawdb-server
+      - drawdb-collab
+
+  drawdb-collab:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: drawdb-collab
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      COLLAB_PORT: ${COLLAB_PORT:-4001}
+      PERSIST_BASE_URL: ${PERSIST_BASE_URL:-http://drawdb-server:5000}
+      PERSIST_FILENAME: ${PERSIST_FILENAME:-share.json}
+      PERSIST_FLUSH_MS: ${PERSIST_FLUSH_MS:-30000}
+      PERSIST_OPS_THRESHOLD: ${PERSIST_OPS_THRESHOLD:-50}
+    ports:
+      - "${COLLAB_PORT:-4001}:${COLLAB_PORT:-4001}"
+    depends_on:
+      - drawdb-server
+
+  drawdb-server:
+    image: node:20-alpine
+    container_name: drawdb-server
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - ../drawdb-server:/var/www/html
+    environment:
+      CLIENT_URLS: ${CLIENT_URLS:-http://localhost:3000}
+      PORT: ${PORT:-5000}
+      NODE_ENV: ${NODE_ENV:-production}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    command: sh -c "npm install --include=dev && npm run dev"
+    ports:
+      - "${PORT:-5000}:5000"
+
+networks:
+  default:
+    driver: bridge

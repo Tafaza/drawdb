@@ -124,7 +124,12 @@ export default function WorkSpace() {
       setNotes(diagram.notes ?? []);
       setAreas(diagram.subjectAreas ?? []);
       setTasks(diagram.todos ?? []);
-      setTransform(diagram.transform ?? { pan: { x: 0, y: 0 }, zoom: 1 });
+
+      // Preserve local viewport to avoid remote edits snapping the view
+      const nextTransform =
+        transform ?? diagram.transform ?? { pan: { x: 0, y: 0 }, zoom: 1 };
+      setTransform(nextTransform);
+
       if (databases[diagram.database ?? DB.GENERIC].hasTypes) {
         setTypes(diagram.types ?? []);
       }
@@ -146,6 +151,7 @@ export default function WorkSpace() {
       setTransform,
       setTypes,
       setEnums,
+      transform,
     ],
   );
 
@@ -665,6 +671,7 @@ export default function WorkSpace() {
                 setTitle={setTitle}
                 lastSaved={lastSaved}
                 setLastSaved={setLastSaved}
+                hideSaveState={Boolean(collabShareId)}
               />
             </div>
             <div className="absolute right-2 top-1">

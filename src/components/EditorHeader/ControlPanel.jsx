@@ -92,6 +92,7 @@ export default function ControlPanel({
   title,
   setTitle,
   lastSaved,
+  hideSaveState = false,
 }) {
   const [modal, setModal] = useState(MODAL.NONE);
   const [sidesheet, setSidesheet] = useState(SIDESHEET.NONE);
@@ -1927,6 +1928,7 @@ export default function ControlPanel({
   }
 
   function getState() {
+    if (hideSaveState) return "";
     switch (saveState) {
       case State.NONE:
         return t("no_changes");
@@ -2127,7 +2129,7 @@ export default function ControlPanel({
                 ))}
               </div>
               {layout.readOnly && <Tag size="small">{t("read_only")}</Tag>}
-              {!layout.readOnly && (
+              {!layout.readOnly && !hideSaveState && (
                 <Tag
                   size="small"
                   type="light"

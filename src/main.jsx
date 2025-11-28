@@ -6,10 +6,14 @@ import en_US from "@douyinfe/semi-ui/lib/es/locale/source/en_US";
 import "./index.css";
 import "./i18n/i18n.js";
 
+const enableAnalytics =
+  (import.meta.env.VERCEL && import.meta.env.PROD) ||
+  import.meta.env.VITE_ENABLE_ANALYTICS === "true";
+
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(
   <LocaleProvider locale={en_US}>
     <App />
-    <Analytics />
+    {enableAnalytics ? <Analytics /> : null}
   </LocaleProvider>,
 );

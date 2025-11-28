@@ -16,6 +16,14 @@ const server = new WebSocketServer({ port: PORT }, () => {
 });
 
 const now = () => Date.now();
+const sanitizeDiagram = (diagram) => {
+  if (!diagram) return diagram;
+  const clean = JSON.parse(JSON.stringify(diagram));
+  delete clean.transform; // keep viewport local
+  return clean;
+};
+
+const diagramsEqual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 const getRoom = (shareId) => {
   if (!rooms.has(shareId)) {
@@ -136,9 +144,16 @@ server.on("connection", (socket) => {
       }
       case "op": {
         if (message.op?.kind === "doc:replace") {
-          room.diagram = message.op.diagram;
-          room.dirty = true;
-          room.opCount += 1;
+          const sanitized = sanitizeDiagram(message.op.diagram);
+          // Drop no-op updates (e.g., viewport/transform-only changes)
+          if (!room.diagram || !diagramsEqual(sanitized, room.diagram)) {
+            room.diagram = sanitized;
+            room.dirty = true;
+            room.opCount += 1;
+            message.op = { ...message.op, diagram: sanitized };
+          } else {
+            break;
+          }
         }
         broadcast(room, { type: "op", clientId, op: message.op });
         if (
