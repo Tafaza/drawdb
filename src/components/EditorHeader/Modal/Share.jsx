@@ -8,7 +8,6 @@ import {
   useDiagram,
   useEnums,
   useNotes,
-  useTransform,
   useTypes,
 } from "../../../hooks";
 import { databases } from "../../../data/databases";
@@ -24,7 +23,6 @@ export default function Share({ title, setModal }) {
   const { areas } = useAreas();
   const { types } = useTypes();
   const { enums } = useEnums();
-  const { transform } = useTransform();
   const [error, setError] = useState(null);
   const url =
     window.location.origin + window.location.pathname + "?shareId=" + gistId;
@@ -39,7 +37,6 @@ export default function Share({ title, setModal }) {
       database: database,
       ...(databases[database].hasTypes && { types: types }),
       ...(databases[database].hasEnums && { enums: enums }),
-      transform: transform,
     });
   }, [
     areas,
@@ -50,7 +47,6 @@ export default function Share({ title, setModal }) {
     title,
     enums,
     types,
-    transform,
   ]);
 
   const unshare = useCallback(async () => {

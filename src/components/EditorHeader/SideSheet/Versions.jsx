@@ -19,7 +19,6 @@ import {
   useEnums,
   useLayout,
   useNotes,
-  useTransform,
   useTypes,
 } from "../../../hooks";
 import { databases } from "../../../data/databases";
@@ -36,7 +35,6 @@ export default function Versions({ open, title, setTitle }) {
   const { notes, setNotes } = useNotes();
   const { types, setTypes } = useTypes();
   const { enums, setEnums } = useEnums();
-  const { transform } = useTransform();
   const { t, i18n } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
   const [versions, setVersions] = useState([]);
@@ -57,7 +55,6 @@ export default function Versions({ open, title, setTitle }) {
       database: database,
       ...(databases[database].hasTypes && { types: types }),
       ...(databases[database].hasEnums && { enums: enums }),
-      transform: transform,
     });
   }, [
     areas,
@@ -68,7 +65,6 @@ export default function Versions({ open, title, setTitle }) {
     title,
     enums,
     types,
-    transform,
   ]);
 
   const currentStep = useMemo(() => {
@@ -191,10 +187,12 @@ export default function Versions({ open, title, setTitle }) {
       database: database,
       ...(databases[database].hasTypes && { types: types }),
       ...(databases[database].hasEnums && { enums: enums }),
-      transform: transform,
     };
 
-    return !_.isEqual(previousDiagram, currentDiagram);
+    return !_.isEqual(
+      _.omit(previousDiagram, "transform"),
+      _.omit(currentDiagram, "transform"),
+    );
   };
 
   const recordVersion = async () => {

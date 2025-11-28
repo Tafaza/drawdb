@@ -456,7 +456,9 @@ export default function WorkSpace() {
         setRelationships(parsedDiagram.relationships);
         setNotes(parsedDiagram.notes);
         setAreas(parsedDiagram.subjectAreas);
-        setTransform(parsedDiagram.transform);
+        setTransform(
+          parsedDiagram.transform ?? { pan: { x: 0, y: 0 }, zoom: 1 },
+        );
         if (databases[parsedDiagram.database].hasTypes) {
           if (parsedDiagram.types) {
             setTypes(
