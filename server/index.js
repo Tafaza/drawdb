@@ -1,3 +1,4 @@
+/* eslint-env node */
 import { WebSocketServer } from "ws";
 
 const PORT = process.env.COLLAB_PORT || 4000;
