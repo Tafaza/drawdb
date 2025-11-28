@@ -79,9 +79,16 @@ export default function WorkSpace() {
     const stored = localStorage.getItem("collabMode");
     return stored === "view" ? "view" : "edit";
   });
-  const collabShareId = gistId || loadedFromGistId || searchParams.get("shareId");
+  const collabShareId = useMemo(
+    () => gistId || loadedFromGistId || searchParams.get("shareId"),
+    [gistId, loadedFromGistId, searchParams],
+  );
   const applyingRemoteRef = useRef(false);
   const collabClientIdRef = useRef(null);
+  const transformRef = useRef(transform);
+  useEffect(() => {
+    transformRef.current = transform;
+  }, [transform]);
   if (collabClientIdRef.current === null) {
     const stored = localStorage.getItem("collabClientId");
     if (stored) {
@@ -127,7 +134,7 @@ export default function WorkSpace() {
 
       // Preserve local viewport to avoid remote edits snapping the view
       const nextTransform =
-        transform ?? diagram.transform ?? { pan: { x: 0, y: 0 }, zoom: 1 };
+        transformRef.current ?? diagram.transform ?? { pan: { x: 0, y: 0 }, zoom: 1 };
       setTransform(nextTransform);
 
       if (databases[diagram.database ?? DB.GENERIC].hasTypes) {
@@ -151,7 +158,7 @@ export default function WorkSpace() {
       setTransform,
       setTypes,
       setEnums,
-      transform,
+      transformRef,
     ],
   );
 
@@ -807,27 +814,32 @@ export default function WorkSpace() {
 
 function CollabEmitter({ mode, buildSnapshot, applyingRemoteRef }) {
   const { enabled, connection, sendOp } = useCollab();
-  const syncTimer = useRef(null);
+  const lastSentRef = useRef(null);
+  const buildSnapshotRef = useRef(buildSnapshot);
 
   useEffect(() => {
-    if (!enabled || mode === "view") return;
-    if (connection !== "open") return;
-    if (applyingRemoteRef.current) {
-      applyingRemoteRef.current = false;
-      return;
-    }
+    buildSnapshotRef.current = buildSnapshot;
+  }, [buildSnapshot]);
 
-    if (syncTimer.current) clearTimeout(syncTimer.current);
+  useEffect(() => {
+    if (!enabled || mode === "view" || connection !== "open") return undefined;
 
-    syncTimer.current = setTimeout(() => {
-      const diagram = buildSnapshot();
-      sendOp({ kind: "doc:replace", diagram });
-    }, 400);
+    const syncInterval = setInterval(() => {
+      if (applyingRemoteRef.current) return;
+
+      const diagram = buildSnapshotRef.current();
+      const serialized = JSON.stringify(diagram);
+
+      if (serialized !== lastSentRef.current) {
+        lastSentRef.current = serialized;
+        sendOp({ kind: "doc:replace", diagram });
+      }
+    }, 500);
 
     return () => {
-      if (syncTimer.current) clearTimeout(syncTimer.current);
+      clearInterval(syncInterval);
     };
-  }, [enabled, connection, mode, buildSnapshot, applyingRemoteRef, sendOp]);
+  }, [enabled, connection, mode, sendOp, applyingRemoteRef]);
 
   return null;
 }

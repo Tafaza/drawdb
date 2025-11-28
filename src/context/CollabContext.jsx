@@ -28,26 +28,28 @@ export function CollabProvider({ shareId, mode = "edit", onRemoteOp, children })
   const enabled = Boolean(import.meta.env.VITE_COLLAB_WS_URL && shareId);
   const modeFromParam = mode === "view" ? "view" : "edit";
 
-  const handleMessage = useCallback(
-    (message) => {
-      if (!message?.type) return;
+  const onRemoteOpRef = useRef(onRemoteOp);
+  useEffect(() => {
+    onRemoteOpRef.current = onRemoteOp;
+  }, [onRemoteOp]);
 
-      switch (message.type) {
-        case "presence":
-          setParticipants(message.participants ?? {});
-          break;
-        case "op":
-          onRemoteOp?.(message);
-          break;
-        case "error":
-          setLastError(message.error);
-          break;
-        default:
-          break;
-      }
-    },
-    [onRemoteOp],
-  );
+  const handleMessage = useCallback((message) => {
+    if (!message?.type) return;
+
+    switch (message.type) {
+      case "presence":
+        setParticipants(message.participants ?? {});
+        break;
+      case "op":
+        onRemoteOpRef.current?.(message);
+        break;
+      case "error":
+        setLastError(message.error);
+        break;
+      default:
+        break;
+    }
+  }, []);
 
   useEffect(() => {
     if (!enabled) {
@@ -78,15 +80,18 @@ export function CollabProvider({ shareId, mode = "edit", onRemoteOp, children })
     clientRef.current.send("op", { op });
   }, []);
 
-  const value = {
-    enabled,
-    connection,
-    clientId,
-    participants,
-    mode: modeFromParam,
-    lastError,
-    sendOp,
-  };
+  const value = useMemo(
+    () => ({
+      enabled,
+      connection,
+      clientId,
+      participants,
+      mode: modeFromParam,
+      lastError,
+      sendOp,
+    }),
+    [enabled, connection, clientId, participants, modeFromParam, lastError, sendOp],
+  );
 
   return <CollabContext.Provider value={value}>{children}</CollabContext.Provider>;
 }
