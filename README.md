@@ -71,4 +71,9 @@ If you want to enable sharing, you need the optional [drawdb-server](https://git
 - Create a PAT with the `gist` scope (GitHub → Settings → Developer settings → Personal access tokens (classic) → New token).
 - Put that token in the drawdb-server `.env` as `GITHUB_TOKEN=<your_token>` (keep it off the frontend).
 - Start drawdb-server (see its README) and point the app to it using the `.env.sample` values (e.g., `VITE_BACKEND_URL`).
-- For live collaboration, also start the collab WS server in `server/` (`COLLAB_PORT`, optional `PERSIST_BASE_URL` to flush to drawdb-server). See `COLLAB_SETUP.md` / `COLLAB_DEPLOYMENT.md` for details.
+- For live collaboration, also start the collab WS server in `server/` (`COLLAB_PORT`, optional `PERSIST_BASE_URL` to flush to drawdb-server). See `docs/collab/COLLAB_SETUP.md` / `docs/collab/COLLAB_DEPLOYMENT.md` for details.
+
+## Docs
+
+- Sharing links and local persistence: `docs/sharing.md`
+- Collaboration setup and deployment: `docs/collab/`
