@@ -28,16 +28,20 @@ export default function Share({ title, setModal }) {
     window.location.origin + window.location.pathname + "?shareId=" + gistId;
 
   const diagramToString = useCallback(() => {
-    return JSON.stringify({
-      title,
-      tables: tables,
-      relationships: relationships,
-      notes: notes,
-      subjectAreas: areas,
-      database: database,
-      ...(databases[database].hasTypes && { types: types }),
-      ...(databases[database].hasEnums && { enums: enums }),
-    });
+    return JSON.stringify(
+      {
+        title,
+        tables: tables,
+        relationships: relationships,
+        notes: notes,
+        subjectAreas: areas,
+        database: database,
+        ...(databases[database].hasTypes && { types: types }),
+        ...(databases[database].hasEnums && { enums: enums }),
+      },
+      null,
+      2,
+    );
   }, [
     areas,
     notes,

@@ -46,16 +46,20 @@ export default function Versions({ open, title, setTitle }) {
   const cacheRef = useMemo(() => loadCache(), []);
 
   const diagramToString = useCallback(() => {
-    return JSON.stringify({
-      title,
-      tables,
-      relationships: relationships,
-      notes: notes,
-      subjectAreas: areas,
-      database: database,
-      ...(databases[database].hasTypes && { types: types }),
-      ...(databases[database].hasEnums && { enums: enums }),
-    });
+    return JSON.stringify(
+      {
+        title,
+        tables,
+        relationships: relationships,
+        notes: notes,
+        subjectAreas: areas,
+        database: database,
+        ...(databases[database].hasTypes && { types: types }),
+        ...(databases[database].hasEnums && { enums: enums }),
+      },
+      null,
+      2,
+    );
   }, [
     areas,
     notes,
