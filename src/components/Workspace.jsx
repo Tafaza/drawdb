@@ -53,6 +53,7 @@ export default function WorkSpace() {
   const [showSelectDbModal, setShowSelectDbModal] = useState(false);
   const [showRestoreModal, setShowRestoreModal] = useState(false);
   const [selectedDb, setSelectedDb] = useState("");
+  const [collabSyncReady, setCollabSyncReady] = useState(false);
   const { layout, setLayout } = useLayout();
   const { settings } = useSettings();
   const { types, setTypes } = useTypes();
@@ -183,9 +184,10 @@ export default function WorkSpace() {
 
       if (message.op.kind === "doc:replace") {
         applyDiagramState(message.op.diagram);
+        setCollabSyncReady(true);
       }
     },
-    [applyDiagramState, collabClientIdRef],
+    [applyDiagramState, collabClientIdRef, setCollabSyncReady],
   );
 
   const buildDiagramSnapshot = useCallback(() => {
@@ -314,6 +316,8 @@ export default function WorkSpace() {
   ]);
 
   const load = useCallback(async () => {
+    let syncReady = true;
+
     const loadLatestDiagram = async () => {
       await db.diagrams
         .orderBy("lastModified")
@@ -536,7 +540,9 @@ export default function WorkSpace() {
       } catch (e) {
         console.log(e);
         setSaveState(State.FAILED_TO_LOAD);
+        return false;
       }
+      return true;
     };
 
     const shareId = searchParams.get("shareId");
@@ -552,30 +558,33 @@ export default function WorkSpace() {
         window.name = "";
         setId(0);
       }
-      await loadFromGist(shareId);
-      return;
+      const success = await loadFromGist(shareId);
+      syncReady = success;
+      return syncReady;
     }
 
     if (window.name === "") {
       await loadLatestDiagram();
-    } else {
-      const name = window.name.split(" ");
-      const op = name[0];
-      const id = parseInt(name[1]);
-      switch (op) {
-        case "d": {
-          await loadDiagram(id);
-          break;
-        }
-        case "t":
-        case "lt": {
-          await loadTemplate(id);
-          break;
-        }
-        default:
-          break;
-      }
+      return syncReady;
     }
+
+    const name = window.name.split(" ");
+    const op = name[0];
+    const id = parseInt(name[1]);
+    switch (op) {
+      case "d": {
+        await loadDiagram(id);
+        break;
+      }
+      case "t":
+      case "lt": {
+        await loadTemplate(id);
+        break;
+      }
+      default:
+        break;
+    }
+    return syncReady;
   }, [
     setTransform,
     setRedoStack,
@@ -672,7 +681,26 @@ export default function WorkSpace() {
   useEffect(() => {
     document.title = "Editor | drawDB";
 
-    load();
+    setCollabSyncReady(false);
+    let cancelled = false;
+    const runLoad = async () => {
+      try {
+        const success = await load();
+        if (!cancelled) {
+          setCollabSyncReady(Boolean(success));
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setCollabSyncReady(false);
+        }
+      }
+    };
+
+    runLoad();
+
+    return () => {
+      cancelled = true;
+    };
   }, [load]);
 
   return (
@@ -715,6 +743,7 @@ export default function WorkSpace() {
           mode={collabMode}
           buildSnapshot={buildDiagramSnapshot}
           applyingRemoteRef={applyingRemoteRef}
+          canSync={collabSyncReady}
         />
         <div
           className="flex h-full overflow-y-auto"
@@ -834,7 +863,7 @@ export default function WorkSpace() {
   );
 }
 
-function CollabEmitter({ mode, buildSnapshot, applyingRemoteRef }) {
+function CollabEmitter({ mode, buildSnapshot, applyingRemoteRef, canSync }) {
   const { enabled, connection, sendOp } = useCollab();
   const lastSentRef = useRef(null);
   const buildSnapshotRef = useRef(buildSnapshot);
@@ -844,7 +873,8 @@ function CollabEmitter({ mode, buildSnapshot, applyingRemoteRef }) {
   }, [buildSnapshot]);
 
   useEffect(() => {
-    if (!enabled || mode === "view" || connection !== "open") return undefined;
+    if (!enabled || mode === "view" || connection !== "open" || !canSync)
+      return undefined;
 
     const syncInterval = setInterval(() => {
       if (applyingRemoteRef.current) return;
@@ -861,7 +891,7 @@ function CollabEmitter({ mode, buildSnapshot, applyingRemoteRef }) {
     return () => {
       clearInterval(syncInterval);
     };
-  }, [enabled, connection, mode, sendOp, applyingRemoteRef]);
+  }, [enabled, connection, mode, sendOp, applyingRemoteRef, canSync]);
 
   return null;
 }
