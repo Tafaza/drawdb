@@ -79,6 +79,7 @@ export default function WorkSpace() {
     const stored = localStorage.getItem("collabMode");
     return stored === "view" ? "view" : "edit";
   });
+  const userSelectedModeRef = useRef(Boolean(searchParams.get("mode")));
   const collabShareId = useMemo(
     () => gistId || loadedFromGistId || searchParams.get("shareId"),
     [gistId, loadedFromGistId, searchParams],
@@ -118,6 +119,19 @@ export default function WorkSpace() {
       setSearchParams(params, { replace: true });
     },
     [searchParams, setSearchParams],
+  );
+
+  const handleCollabModeChange = useCallback(
+    (nextMode) => {
+      userSelectedModeRef.current = true;
+      setCollabModeParam(nextMode);
+    },
+    [setCollabModeParam],
+  );
+
+  const autoSwitchToView = useCallback(
+    () => setCollabModeParam("view"),
+    [setCollabModeParam],
   );
 
   const applyDiagramState = useCallback(
@@ -667,6 +681,11 @@ export default function WorkSpace() {
       mode={collabMode}
       onRemoteOp={handleRemoteOp}
     >
+      <CollabAutoViewGuard
+        currentMode={collabMode}
+        onSwitchToView={autoSwitchToView}
+        userSelectedModeRef={userSelectedModeRef}
+      />
       <div className="h-full flex flex-col overflow-hidden theme">
         <IdContext.Provider value={{ gistId, setGistId, version, setVersion }}>
           <div className="relative px-2">
@@ -683,7 +702,10 @@ export default function WorkSpace() {
             </div>
             <div className="absolute right-2 top-1">
               <div className="flex items-center gap-2">
-                <CollabModeToggle mode={collabMode} onChange={setCollabModeParam} />
+                <CollabModeToggle
+                  mode={collabMode}
+                  onChange={handleCollabModeChange}
+                />
                 <CollabStatus />
               </div>
             </div>
@@ -840,6 +862,34 @@ function CollabEmitter({ mode, buildSnapshot, applyingRemoteRef }) {
       clearInterval(syncInterval);
     };
   }, [enabled, connection, mode, sendOp, applyingRemoteRef]);
+
+  return null;
+}
+
+function CollabAutoViewGuard({ currentMode, onSwitchToView, userSelectedModeRef }) {
+  const { enabled, connection, participants, clientId } = useCollab();
+
+  useEffect(() => {
+    if (!enabled || connection !== "open") return;
+    if (currentMode !== "edit") return;
+    if (userSelectedModeRef.current) return;
+
+    const hasOtherEditor = Object.entries(participants || {}).some(
+      ([participantId, info]) => participantId !== clientId && info?.mode === "edit",
+    );
+
+    if (hasOtherEditor) {
+      onSwitchToView();
+    }
+  }, [
+    enabled,
+    connection,
+    participants,
+    clientId,
+    currentMode,
+    onSwitchToView,
+    userSelectedModeRef,
+  ]);
 
   return null;
 }
