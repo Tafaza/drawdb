@@ -36,6 +36,11 @@ export async function get(gistId) {
   return res.data;
 }
 
+export async function list() {
+  const res = await axios.get(`${baseUrl}/gists`);
+  return res.data;
+}
+
 export async function getCommits(gistId, perPage = 20, page = 1) {
   const res = await axios.get(`${baseUrl}/gists/${gistId}/commits`, {
     params: {

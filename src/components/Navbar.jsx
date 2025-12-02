@@ -39,6 +39,12 @@ export default function Navbar() {
               Templates
             </Link>
             <Link
+              to="/drawings"
+              className="text-lg font-semibold hover:text-sky-800 transition-colors duration-300"
+            >
+              Drawings
+            </Link>
+            <Link
               to={socials.docs}
               className="text-lg font-semibold hover:text-sky-800 transition-colors duration-300"
             >
@@ -115,6 +121,13 @@ export default function Navbar() {
           className="hover:bg-zinc-100 block p-3 text-base font-semibold"
         >
           Templates
+        </Link>
+        <hr />
+        <Link
+          to="/drawings"
+          className="hover:bg-zinc-100 block p-3 text-base font-semibold"
+        >
+          Drawings
         </Link>
         <hr />
         <Link

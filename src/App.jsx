@@ -7,6 +7,7 @@ const BugReport = lazy(() => import("./pages/BugReport"));
 const Templates = lazy(() => import("./pages/Templates"));
 const LandingPage = lazy(() => import("./pages/LandingPage"));
 const NotFound = lazy(() => import("./pages/NotFound"));
+const Drawings = lazy(() => import("./pages/Drawings"));
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
             <Route path="/editor" element={<Editor />} />
             <Route path="/bug-report" element={<BugReport />} />
             <Route path="/templates" element={<Templates />} />
+            <Route path="/drawings" element={<Drawings />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
