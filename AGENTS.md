@@ -22,6 +22,7 @@ Use this guide to get productive quickly and keep contributions consistent with 
 
 ## Testing Guidelines
 - No automated test suite is present; rely on `npm run lint` and manual QA in `npm run dev`.
+- When you make code changes, run `npm run lint` at minimum to catch regressions early.
 - For new tests, place them near the code under `src/` using Vitest or React Testing Library; name files `*.test.jsx`. Smoke-test critical flows (diagram creation, export/import) before shipping.
 
 ## Environment & Security Notes

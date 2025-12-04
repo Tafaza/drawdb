@@ -22,7 +22,6 @@ async function hydrateShare(gistSummary) {
   try {
     const payload = coalescePayload(gistSummary);
     const id = payload.id || gistSummary?.id;
-    const hasShareFile = payload.files?.[SHARE_FILENAME];
     let shareFile = payload.files?.[SHARE_FILENAME];
     let updatedAt = payload.updated_at || payload.created_at;
 

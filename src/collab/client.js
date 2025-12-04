@@ -1,13 +1,6 @@
 const RECONNECT_DELAYS_MS = [1000, 2000, 5000, 10000];
 const MAX_RECONNECT_ATTEMPTS = 10;
 
-const READY_STATES = {
-  0: "connecting",
-  1: "open",
-  2: "closing",
-  3: "closed",
-};
-
 export class CollabClient {
   constructor({ url, shareId, mode = "edit", clientId, onMessage, onStatus }) {
     this.url = url;

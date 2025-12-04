@@ -8,7 +8,7 @@ Prereqs
 - Docker Engine + Compose plugin installed (WSL2/Ubuntu): `docker --version` should work.
 - Folder layout with the backend repo alongside this one:
   - `~/drawdb-stack/drawdb` (this repo)
-  - `~/drawdb-stack/drawdb-server` (clone https://github.com/drawdb-io/drawdb-server)
+ - `~/drawdb-stack/drawdb-server` (clone https://github.com/drawdb-io/drawdb-server)
 
 Setup steps
 -----------
@@ -23,7 +23,7 @@ cd drawdb
 
 2) Optional: create `.env` next to `docker-compose.local.yml` to override defaults:
 ```
-VITE_BACKEND_URL=http://localhost:3001/api
+VITE_BACKEND_URL=http://localhost:3001
 VITE_COLLAB_WS_URL=ws://localhost:4000/collab
 CLIENT_URLS=http://localhost:3000
 PORT=5000
@@ -54,3 +54,4 @@ Notes
 - The backend uses a bind mount to `../drawdb-server`, so local code changes are reflected without rebuilding.
 - The backend command installs dependencies on container start (`npm install --include=dev && npm run dev`). For faster starts, you can pre-install on the host inside `drawdb-server`.
 - If you change ports, keep `CLIENT_URLS`, `VITE_BACKEND_URL`, and `VITE_COLLAB_WS_URL` in sync.
+- drawdb-server exposes routes at the root (`/gists`, `/email/send`); only add a prefix like `/api` if your reverse proxy rewrites paths accordingly.
