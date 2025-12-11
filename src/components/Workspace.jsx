@@ -19,6 +19,7 @@ import {
   useEnums,
 } from "../hooks";
 import FloatingControls from "./FloatingControls";
+import TableSearchShortcut from "./TableSearchShortcut";
 import { Button, Modal, Tag } from "@douyinfe/semi-ui";
 import { IconAlertTriangle } from "@douyinfe/semi-icons";
 import { useTranslation } from "react-i18next";
@@ -714,6 +715,7 @@ export default function WorkSpace() {
         onSwitchToView={autoSwitchToView}
         userSelectedModeRef={userSelectedModeRef}
       />
+      <TableSearchShortcut />
       <div className="h-full flex flex-col overflow-hidden theme">
         <IdContext.Provider value={{ gistId, setGistId, version, setVersion }}>
           <div className="relative px-2">

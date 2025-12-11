@@ -1,12 +1,11 @@
 import { useMemo } from "react";
-import { useSelect } from "../../../hooks";
+import { useTableFocus } from "../../../hooks";
 import { TreeSelect } from "@douyinfe/semi-ui";
 import { IconSearch } from "@douyinfe/semi-icons";
-import { ObjectType } from "../../../data/constants";
 import { useTranslation } from "react-i18next";
 
 export default function SearchBar({ tables }) {
-  const { setSelectedElement } = useSelect();
+  const { focusTableById } = useTableFocus();
   const { t } = useTranslation();
 
   const treeData = useMemo(() => {
@@ -40,22 +39,20 @@ export default function SearchBar({ tables }) {
       filterTreeNode
       placeholder={t("search")}
       onChange={(node) => {
+        if (!node?.tableId) return;
+
         const { tableId, id, children } = node;
 
-        setSelectedElement((prev) => ({
-          ...prev,
-          id: tableId,
-          open: true,
-          element: ObjectType.TABLE,
-        }));
+        focusTableById(tableId);
+
         document
           .getElementById(`scroll_table_${tableId}`)
-          .scrollIntoView({ behavior: "smooth" });
+          ?.scrollIntoView({ behavior: "smooth" });
 
         if (!children) {
           document
             .getElementById(`scroll_table_${tableId}_input_${id}`)
-            .focus();
+            ?.focus();
         }
       }}
       onChangeWithObject
