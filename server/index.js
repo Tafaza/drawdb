@@ -85,15 +85,24 @@ const persistRoom = async (shareId) => {
     });
     if (!res.ok) {
       console.warn(`[collab] persist failed for ${shareId}: ${res.status} ${res.statusText}`);
+      broadcast(room, {
+        type: "persist_error",
+        error: `${res.status} ${res.statusText}`,
+      });
       return;
     }
     if (room.diagram === snapshot) {
       room.dirty = false;
       room.opCount = 0;
       room.lastFlushed = now();
+      broadcast(room, {
+        type: "persisted",
+        lastFlushed: room.lastFlushed,
+      });
     }
   } catch (e) {
     console.warn(`[collab] persist error for ${shareId}`, e);
+    broadcast(room, { type: "persist_error", error: "network" });
   }
 };
 

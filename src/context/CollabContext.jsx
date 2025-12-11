@@ -9,6 +9,7 @@ export const CollabContext = createContext({
   participants: {},
   mode: "edit",
   lastError: null,
+  persist: { status: "idle", lastFlushed: null },
   sendOp: () => {},
 });
 
@@ -22,6 +23,7 @@ export function CollabProvider({
   const [connection, setConnection] = useState("disabled");
   const [participants, setParticipants] = useState({});
   const [lastError, setLastError] = useState(null);
+  const [persist, setPersist] = useState({ status: "idle", lastFlushed: null });
   const clientRef = useRef(null);
   const clientIdRef = useRef(clientIdProp || nanoid());
   const clientId = clientIdRef.current;
@@ -46,6 +48,16 @@ export function CollabProvider({
         break;
       case "error":
         setLastError(message.error);
+        break;
+      case "persisted":
+        setPersist({ status: "ok", lastFlushed: message.lastFlushed ?? Date.now() });
+        break;
+      case "persist_error":
+        setPersist((prev) => ({
+          status: "error",
+          lastFlushed: prev.lastFlushed,
+          error: message.error,
+        }));
         break;
       default:
         break;
@@ -89,9 +101,10 @@ export function CollabProvider({
       participants,
       mode: modeFromParam,
       lastError,
+      persist,
       sendOp,
     }),
-    [enabled, connection, clientId, participants, modeFromParam, lastError, sendOp],
+    [enabled, connection, clientId, participants, modeFromParam, lastError, persist, sendOp],
   );
 
   return <CollabContext.Provider value={value}>{children}</CollabContext.Provider>;

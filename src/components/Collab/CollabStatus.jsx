@@ -11,7 +11,7 @@ const STATUS_COLORS = {
 };
 
 export default function CollabStatus() {
-  const { enabled, connection, participants, mode, lastError } = useCollab();
+  const { enabled, connection, participants, mode, lastError, persist } = useCollab();
 
   const label = useMemo(() => {
     if (!enabled) return "Collab off";
@@ -25,7 +25,9 @@ export default function CollabStatus() {
     <Tooltip
       content={
         enabled
-          ? `Mode: ${mode} • Participants: ${count}${lastError ? " • Error" : ""}`
+          ? `Mode: ${mode} • Participants: ${count}${
+              persist?.status === "error" ? " • Persist error" : ""
+            }${lastError ? " • Error" : ""}`
           : "Live collaboration disabled"
       }
     >
@@ -34,6 +36,9 @@ export default function CollabStatus() {
           <i className="bi bi-people" />
           {label}
           {enabled && <span className="text-xs">({count})</span>}
+          {enabled && persist?.status === "error" && (
+            <span className="text-xs text-red-500">persist</span>
+          )}
         </span>
       </Tag>
     </Tooltip>
