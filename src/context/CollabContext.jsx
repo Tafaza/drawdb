@@ -18,6 +18,8 @@ export function CollabProvider({
   mode = "edit",
   clientId: clientIdProp,
   onRemoteOp,
+  onPersisted,
+  onPersistError,
   children,
 }) {
   const [connection, setConnection] = useState("disabled");
@@ -51,6 +53,7 @@ export function CollabProvider({
         break;
       case "persisted":
         setPersist({ status: "ok", lastFlushed: message.lastFlushed ?? Date.now() });
+        onPersisted?.(message);
         break;
       case "persist_error":
         setPersist((prev) => ({
@@ -58,11 +61,12 @@ export function CollabProvider({
           lastFlushed: prev.lastFlushed,
           error: message.error,
         }));
+        onPersistError?.(message);
         break;
       default:
         break;
     }
-  }, []);
+  }, [onPersisted, onPersistError]);
 
   useEffect(() => {
     if (!enabled) {

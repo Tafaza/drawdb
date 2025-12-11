@@ -7,6 +7,8 @@ export default function CollabMetadata({
   lastModified,
   revision,
   isLoading,
+  dirty = false,
+  persistError = false,
 }) {
   const { t, i18n } = useTranslation();
 
@@ -36,6 +38,16 @@ export default function CollabMetadata({
             {t("last_modified")}: {formattedDate}
           </span>
         </Tooltip>
+      )}
+      {!isLoading && dirty && (
+        <Tag size="small" type="light" color="orange">
+          {t("saving")}
+        </Tag>
+      )}
+      {!isLoading && persistError && (
+        <Tag size="small" type="danger">
+          {t("failed_to_save")}
+        </Tag>
       )}
       {!isLoading && revision && (
         <Tooltip content={`${t("revision")}: ${revision}`}>

@@ -98,9 +98,14 @@ export default function WorkSpace() {
   const collabClientIdRef = useRef(nanoid());
   const collabVersionRef = useRef(0);
   const transformRef = useRef(transform);
+  const [collabDirty, setCollabDirty] = useState(false);
+  const [collabPersistError, setCollabPersistError] = useState(false);
   useEffect(() => {
     transformRef.current = transform;
   }, [transform]);
+  useEffect(() => {
+    collabDirty && setCollabPersistError(false);
+  }, [collabDirty]);
   const handleResize = (e) => {
     if (!resize) return;
     const w = isRtl(i18n.language) ? window.innerWidth - e.clientX : e.clientX;
@@ -248,14 +253,23 @@ export default function WorkSpace() {
       if (incomingVersion && incomingVersion <= collabVersionRef.current) return;
 
       if (message.op.kind === "doc:replace") {
-        applyDiagramState(message.op.diagram);
-        setCollabSyncReady(true);
         if (incomingVersion) {
           collabVersionRef.current = incomingVersion;
         }
+        applyDiagramState(message.op.diagram);
+        setCollabSyncReady(true);
+        setCollabDirty(false);
+        setCollabPersistError(false);
       }
     },
-    [applyDiagramState, collabClientIdRef, collabVersionRef, setCollabSyncReady],
+    [
+      applyDiagramState,
+      collabClientIdRef,
+      collabVersionRef,
+      setCollabSyncReady,
+      setCollabDirty,
+      setCollabPersistError,
+    ],
   );
 
   const buildDiagramSnapshot = useCallback(() => {
@@ -746,12 +760,14 @@ export default function WorkSpace() {
     if (!collabShareId) return;
 
     refreshRemoteMeta();
-    const interval = setInterval(refreshRemoteMeta, 15000);
+    const interval = setInterval(refreshRemoteMeta, 120000);
     return () => clearInterval(interval);
   }, [collabShareId, refreshRemoteMeta]);
 
   useEffect(() => {
     collabVersionRef.current = 0;
+    setCollabDirty(false);
+    setCollabPersistError(false);
   }, [collabShareId]);
 
   useEffect(() => {
@@ -841,6 +857,14 @@ export default function WorkSpace() {
       shareId={collabShareId}
       mode={collabMode}
       clientId={collabClientIdRef.current}
+      onPersisted={() => {
+        setCollabDirty(false);
+        setCollabPersistError(false);
+        refreshRemoteMeta();
+      }}
+      onPersistError={() => {
+        setCollabPersistError(true);
+      }}
       onRemoteOp={handleRemoteOp}
     >
       <CollabAutoViewGuard
@@ -866,6 +890,8 @@ export default function WorkSpace() {
                   lastModified: remoteMeta?.updatedAt,
                   revision: version || remoteMeta?.revision,
                   isLoading: isLoadingRemote,
+                  dirty: collabDirty,
+                  persistError: collabPersistError,
                 }}
               />
             </div>
@@ -887,6 +913,7 @@ export default function WorkSpace() {
           buildSnapshot={buildDiagramSnapshot}
           applyingRemoteRef={applyingRemoteRef}
           canSync={collabSyncReady}
+          onSend={() => setCollabDirty(true)}
         />
         <div
           className="flex h-full overflow-y-auto"
@@ -1006,7 +1033,7 @@ export default function WorkSpace() {
   );
 }
 
-function CollabEmitter({ mode, buildSnapshot, applyingRemoteRef, canSync }) {
+function CollabEmitter({ mode, buildSnapshot, applyingRemoteRef, canSync, onSend }) {
   const { enabled, connection, sendOp } = useCollab();
   const lastSentRef = useRef(null);
   const buildSnapshotRef = useRef(buildSnapshot);
@@ -1028,6 +1055,7 @@ function CollabEmitter({ mode, buildSnapshot, applyingRemoteRef, canSync }) {
       if (serialized !== lastSentRef.current) {
         lastSentRef.current = serialized;
         sendOp({ kind: "doc:replace", diagram });
+        onSend?.();
       }
     }, 500);
 
