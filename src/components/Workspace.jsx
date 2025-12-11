@@ -95,6 +95,7 @@ export default function WorkSpace() {
   );
   const applyingRemoteRef = useRef(false);
   const collabClientIdRef = useRef(nanoid());
+  const collabVersionRef = useRef(0);
   const transformRef = useRef(transform);
   useEffect(() => {
     transformRef.current = transform;
@@ -242,12 +243,18 @@ export default function WorkSpace() {
       if (!message?.op) return;
       if (message.clientId && message.clientId === collabClientIdRef.current) return;
 
+      const incomingVersion = message.op?.version ?? 0;
+      if (incomingVersion && incomingVersion <= collabVersionRef.current) return;
+
       if (message.op.kind === "doc:replace") {
         applyDiagramState(message.op.diagram);
         setCollabSyncReady(true);
+        if (incomingVersion) {
+          collabVersionRef.current = incomingVersion;
+        }
       }
     },
-    [applyDiagramState, collabClientIdRef, setCollabSyncReady],
+    [applyDiagramState, collabClientIdRef, collabVersionRef, setCollabSyncReady],
   );
 
   const buildDiagramSnapshot = useCallback(() => {
@@ -741,6 +748,10 @@ export default function WorkSpace() {
     const interval = setInterval(refreshRemoteMeta, 15000);
     return () => clearInterval(interval);
   }, [collabShareId, refreshRemoteMeta]);
+
+  useEffect(() => {
+    collabVersionRef.current = 0;
+  }, [collabShareId]);
 
   useEffect(() => {
     setLayout((prev) => {

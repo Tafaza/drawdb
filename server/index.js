@@ -38,6 +38,7 @@ const getRoom = (shareId) => {
       lastFlushed: 0,
       opCount: 0,
       dirty: false,
+      version: 0,
     });
   }
   return rooms.get(shareId);
@@ -136,7 +137,7 @@ server.on("connection", (socket) => {
           JSON.stringify({
             type: "op",
             clientId: "server",
-            op: { kind: "doc:replace", diagram: room.diagram },
+            op: { kind: "doc:replace", diagram: room.diagram, version: room.version },
           }),
         );
       }
@@ -166,7 +167,8 @@ server.on("connection", (socket) => {
             room.diagram = sanitized;
             room.dirty = true;
             room.opCount += 1;
-            message.op = { ...message.op, diagram: sanitized };
+            room.version = (room.version || 0) + 1;
+            message.op = { ...message.op, diagram: sanitized, version: room.version };
           } else {
             break;
           }
