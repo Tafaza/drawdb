@@ -552,29 +552,24 @@ export default function WorkSpace() {
         let revision = latestHistory?.version || data?.version;
         let updatedAt =
           latestHistory?.committed_at || data?.updated_at || data?.updatedAt;
-        let revisionIndex = data?.history?.length ?? null;
 
         if (!revision) {
           try {
-            const commits = await getCommits(shareId, 100, 1);
+            const commits = await getCommits(shareId, 1, 1);
             const latestCommit = commits?.data?.[0];
             if (latestCommit?.version) {
               revision = latestCommit.version;
               updatedAt = updatedAt ?? latestCommit.committed_at;
-            }
-            if (commits?.data?.length) {
-              revisionIndex = commits.data.length;
             }
           } catch (err) {
             console.log(err);
           }
         }
 
-        if (revision || updatedAt || revisionIndex) {
+        if (revision || updatedAt) {
           setRemoteMeta({
             revision: revision ?? "",
             updatedAt: updatedAt ?? "",
-            revisionIndex: revisionIndex ?? null,
           });
         } else {
           setRemoteMeta(null);
@@ -823,7 +818,6 @@ export default function WorkSpace() {
                   shareId: collabShareId,
                   lastModified: remoteMeta?.updatedAt,
                   revision: version || remoteMeta?.revision,
-                  revisionIndex: remoteMeta?.revisionIndex,
                   isLoading: isLoadingRemote,
                 }}
               />
