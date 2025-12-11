@@ -9,6 +9,10 @@ const PERSIST_FLUSH_MS = Number(process.env.PERSIST_FLUSH_MS || 30000);
 const PERSIST_OPS_THRESHOLD = Number(process.env.PERSIST_OPS_THRESHOLD || 50);
 const PERSIST_ENABLED = Boolean(PERSIST_BASE_URL);
 
+if (!PERSIST_ENABLED) {
+  console.warn("[collab] PERSIST_BASE_URL not set; collaboration will not persist changes");
+}
+
 const rooms = new Map();
 
 const server = new WebSocketServer({ port: PORT }, () => {
@@ -211,3 +215,25 @@ setInterval(() => {
     sendPresence(shareId);
   }
 }, 10000);
+
+const flushAllRooms = async () => {
+  const entries = Array.from(rooms.keys());
+  if (!entries.length) return;
+  console.log("[collab] Flushing rooms before shutdown:", entries.length);
+  await Promise.all(entries.map((shareId) => persistRoom(shareId)));
+};
+
+const shutdown = async (signal) => {
+  console.log(`[collab] Received ${signal}, shutting down`);
+  try {
+    await flushAllRooms();
+  } catch (e) {
+    console.warn("[collab] Error during shutdown flush", e);
+  } finally {
+    server.close(() => process.exit(0));
+    setTimeout(() => process.exit(0), 2000);
+  }
+};
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
