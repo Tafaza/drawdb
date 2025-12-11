@@ -168,6 +168,7 @@ const it = {
       "*Per il momento è supportato solo il caricamento di script MySQL.",
     blank: "In bianco",
     filename: "Nome del file",
+    revision: "Revisione",
     table_w_no_name: "Dichiarata una tabella senza nome",
     duplicate_table_by_name: "Tabella duplicata con il nome '{{tableName}}'",
     empty_field_name: "Campo `name` vuoto nella tabella '{{tableName}}'",

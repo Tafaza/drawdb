@@ -32,6 +32,7 @@ import { CollabProvider } from "../context/CollabContext";
 import CollabStatus from "./Collab/CollabStatus";
 import { useCollab } from "../hooks/useCollab";
 import CollabModeToggle from "./Collab/CollabModeToggle";
+import CollabMetadata from "./Collab/CollabMetadata";
 
 export const IdContext = createContext({
   gistId: "",
@@ -46,11 +47,13 @@ export default function WorkSpace() {
   const [id, setId] = useState(0);
   const [gistId, setGistId] = useState("");
   const [version, setVersion] = useState("");
+  const [remoteMeta, setRemoteMeta] = useState(null);
   const [loadedFromGistId, setLoadedFromGistId] = useState("");
   const [title, setTitle] = useState("Untitled Diagram");
   const [resize, setResize] = useState(false);
   const [width, setWidth] = useState(SIDEPANEL_MIN_WIDTH);
   const [lastSaved, setLastSaved] = useState("");
+  const [isLoadingRemote, setIsLoadingRemote] = useState(false);
   const [showSelectDbModal, setShowSelectDbModal] = useState(false);
   const [showRestoreModal, setShowRestoreModal] = useState(false);
   const [selectedDb, setSelectedDb] = useState("");
@@ -78,6 +81,7 @@ export default function WorkSpace() {
   const [collabMode, setCollabMode] = useState(() => {
     const paramMode = searchParams.get("mode");
     if (paramMode === "view") return "view";
+    if (searchParams.get("shareId")) return "view";
     const stored = localStorage.getItem("collabMode");
     return stored === "view" ? "view" : "edit";
   });
@@ -85,6 +89,10 @@ export default function WorkSpace() {
   const collabShareId = useMemo(
     () => gistId || loadedFromGistId || searchParams.get("shareId"),
     [gistId, loadedFromGistId, searchParams],
+  );
+  const collabEnabled = useMemo(
+    () => Boolean(import.meta.env.VITE_COLLAB_WS_URL && collabShareId),
+    [collabShareId],
   );
   const applyingRemoteRef = useRef(false);
   const collabClientIdRef = useRef(null);
@@ -135,6 +143,35 @@ export default function WorkSpace() {
     () => setCollabModeParam("view"),
     [setCollabModeParam],
   );
+
+  const prevCollabShareIdRef = useRef(collabShareId);
+  useEffect(() => {
+    const hasModeParam = Boolean(searchParams.get("mode"));
+    if (collabShareId !== prevCollabShareIdRef.current) {
+      // New share link: reset manual selection based on explicit mode param
+      userSelectedModeRef.current = hasModeParam;
+      prevCollabShareIdRef.current = collabShareId;
+    } else if (hasModeParam) {
+      // If a mode param is present, respect it without resetting to view otherwise
+      userSelectedModeRef.current = true;
+    }
+  }, [collabShareId, searchParams]);
+
+  useEffect(() => {
+    if (!collabShareId) return;
+    if (userSelectedModeRef.current) return;
+    if (collabMode !== "view") {
+      setCollabModeParam("view");
+    }
+  }, [collabShareId, collabMode, setCollabModeParam]);
+
+  useEffect(() => {
+    if (collabShareId) return;
+    if (collabMode !== "edit") {
+      userSelectedModeRef.current = false;
+      setCollabModeParam("edit");
+    }
+  }, [collabShareId, collabMode, setCollabModeParam]);
 
   const applyDiagramState = useCallback(
     (diagram) => {
@@ -317,123 +354,136 @@ export default function WorkSpace() {
   ]);
 
   const load = useCallback(async () => {
+    setRemoteMeta(null);
+    setIsLoadingRemote(false);
     let syncReady = true;
 
     const loadLatestDiagram = async () => {
-      await db.diagrams
-        .orderBy("lastModified")
-        .last()
-        .then((d) => {
-          if (d) {
-            if (d.database) {
-              setDatabase(d.database);
-            } else {
-              setDatabase(DB.GENERIC);
+      try {
+        const d = await db.diagrams.orderBy("lastModified").last();
+        if (d) {
+          if (d.loadedFromGistId) {
+            const refreshed = await loadFromGist(d.loadedFromGistId, {
+              silent: true,
+            });
+            if (refreshed) {
+              setId(d.id);
+              window.name = `d ${d.id}`;
+              return;
             }
-            setId(d.id);
-            setGistId(d.gistId);
-            setLoadedFromGistId(d.loadedFromGistId);
-            setTitle(d.name);
-            setTables(d.tables);
-            setRelationships(d.references);
-            setNotes(d.notes);
-            setAreas(d.areas);
-            setTasks(d.todos ?? []);
-            setTransform({ pan: d.pan, zoom: d.zoom });
-            if (databases[database].hasTypes) {
-              if (d.types) {
-                setTypes(
-                  d.types.map((t) =>
-                    t.id
-                      ? t
-                      : {
-                          ...t,
-                          id: nanoid(),
-                          fields: t.fields.map((f) =>
-                            f.id ? f : { ...f, id: nanoid() },
-                          ),
-                        },
-                  ),
-                );
-              } else {
-                setTypes([]);
-              }
-            }
-            if (databases[database].hasEnums) {
-              setEnums(
-                d.enums.map((e) => (!e.id ? { ...e, id: nanoid() } : e)) ?? [],
-              );
-            }
-            window.name = `d ${d.id}`;
-          } else {
-            window.name = "";
-            if (selectedDb === "") setShowSelectDbModal(true);
           }
-        })
-        .catch((error) => {
-          console.log(error);
-        });
+          if (d.database) {
+            setDatabase(d.database);
+          } else {
+            setDatabase(DB.GENERIC);
+          }
+          setId(d.id);
+          setGistId(d.gistId);
+          setLoadedFromGistId(d.loadedFromGistId);
+          setTitle(d.name);
+          setTables(d.tables);
+          setRelationships(d.references);
+          setNotes(d.notes);
+          setAreas(d.areas);
+          setTasks(d.todos ?? []);
+          setTransform({ pan: d.pan, zoom: d.zoom });
+          if (databases[database].hasTypes) {
+            if (d.types) {
+              setTypes(
+                d.types.map((t) =>
+                  t.id
+                    ? t
+                    : {
+                        ...t,
+                        id: nanoid(),
+                        fields: t.fields.map((f) =>
+                          f.id ? f : { ...f, id: nanoid() },
+                        ),
+                      },
+                ),
+              );
+            } else {
+              setTypes([]);
+            }
+          }
+          if (databases[database].hasEnums) {
+            setEnums(d.enums.map((e) => (!e.id ? { ...e, id: nanoid() } : e)) ?? []);
+          }
+          window.name = `d ${d.id}`;
+        } else {
+          window.name = "";
+          if (selectedDb === "") setShowSelectDbModal(true);
+        }
+      } catch (error) {
+        console.log(error);
+      }
     };
 
     const loadDiagram = async (id) => {
-      await db.diagrams
-        .get(id)
-        .then((diagram) => {
-          if (diagram) {
-            if (diagram.database) {
-              setDatabase(diagram.database);
-            } else {
-              setDatabase(DB.GENERIC);
-            }
-            setId(diagram.id);
-            setGistId(diagram.gistId);
-            setLoadedFromGistId(diagram.loadedFromGistId);
-            setTitle(diagram.name);
-            setTables(diagram.tables);
-            setRelationships(diagram.references);
-            setAreas(diagram.areas);
-            setNotes(diagram.notes);
-            setTasks(diagram.todos ?? []);
-            setTransform({
-              pan: diagram.pan,
-              zoom: diagram.zoom,
+      try {
+        const diagram = await db.diagrams.get(id);
+        if (diagram) {
+          if (diagram.loadedFromGistId) {
+            const refreshed = await loadFromGist(diagram.loadedFromGistId, {
+              silent: true,
             });
-            setUndoStack([]);
-            setRedoStack([]);
-            if (databases[database].hasTypes) {
-              if (diagram.types) {
-                setTypes(
-                  diagram.types.map((t) =>
-                    t.id
-                      ? t
-                      : {
-                          ...t,
-                          id: nanoid(),
-                          fields: t.fields.map((f) =>
-                            f.id ? f : { ...f, id: nanoid() },
-                          ),
-                        },
-                  ),
-                );
-              } else {
-                setTypes([]);
-              }
+            if (refreshed) {
+              setId(diagram.id);
+              window.name = `d ${diagram.id}`;
+              return;
             }
-            if (databases[database].hasEnums) {
-              setEnums(
-                diagram.enums.map((e) =>
-                  !e.id ? { ...e, id: nanoid() } : e,
-                ) ?? [],
-              );
-            }
-            window.name = `d ${diagram.id}`;
-          } else {
-            window.name = "";
           }
-        })
-        .catch((error) => {
-          console.log(error);
-        });
+          if (diagram.database) {
+            setDatabase(diagram.database);
+          } else {
+            setDatabase(DB.GENERIC);
+          }
+          setId(diagram.id);
+          setGistId(diagram.gistId);
+          setLoadedFromGistId(diagram.loadedFromGistId);
+          setTitle(diagram.name);
+          setTables(diagram.tables);
+          setRelationships(diagram.references);
+          setAreas(diagram.areas);
+          setNotes(diagram.notes);
+          setTasks(diagram.todos ?? []);
+          setTransform({
+            pan: diagram.pan,
+            zoom: diagram.zoom,
+          });
+          setUndoStack([]);
+          setRedoStack([]);
+          if (databases[database].hasTypes) {
+            if (diagram.types) {
+              setTypes(
+                diagram.types.map((t) =>
+                  t.id
+                    ? t
+                    : {
+                        ...t,
+                        id: nanoid(),
+                        fields: t.fields.map((f) =>
+                          f.id ? f : { ...f, id: nanoid() },
+                        ),
+                      },
+                ),
+              );
+            } else {
+              setTypes([]);
+            }
+          }
+          if (databases[database].hasEnums) {
+            setEnums(
+              diagram.enums.map((e) => (!e.id ? { ...e, id: nanoid() } : e)) ?? [],
+            );
+          }
+          window.name = `d ${diagram.id}`;
+        } else {
+          window.name = "";
+        }
+      } catch (error) {
+        console.log(error);
+      }
     };
 
     const loadTemplate = async (id) => {
@@ -495,9 +545,22 @@ export default function WorkSpace() {
         });
     };
 
-    const loadFromGist = async (shareId) => {
+    const loadFromGist = async (shareId, { silent = false } = {}) => {
+      setIsLoadingRemote(true);
       try {
         const { data } = await get(shareId);
+        const latestHistory = data?.history?.[0];
+        const revision = latestHistory?.version || data?.version;
+        const updatedAt =
+          latestHistory?.committed_at || data?.updated_at || data?.updatedAt;
+        if (revision || updatedAt) {
+          setRemoteMeta({
+            revision: revision ?? "",
+            updatedAt: updatedAt ?? "",
+          });
+        } else {
+          setRemoteMeta(null);
+        }
         const parsedDiagram = JSON.parse(data.files[SHARE_FILENAME].content);
         setUndoStack([]);
         setRedoStack([]);
@@ -509,6 +572,7 @@ export default function WorkSpace() {
         setRelationships(parsedDiagram.relationships);
         setNotes(parsedDiagram.notes);
         setAreas(parsedDiagram.subjectAreas);
+        setTasks(parsedDiagram.todos ?? []);
         setTransform(
           parsedDiagram.transform ?? { pan: { x: 0, y: 0 }, zoom: 1 },
         );
@@ -540,8 +604,13 @@ export default function WorkSpace() {
         }
       } catch (e) {
         console.log(e);
-        setSaveState(State.FAILED_TO_LOAD);
+        if (!silent) {
+          setSaveState(State.FAILED_TO_LOAD);
+        }
+        setRemoteMeta(null);
         return false;
+      } finally {
+        setIsLoadingRemote(false);
       }
       return true;
     };
@@ -620,25 +689,29 @@ export default function WorkSpace() {
       return;
     }
 
+    if (collabShareId) return;
+
     const stored = localStorage.getItem("collabMode");
     const next = stored === "view" ? "view" : "edit";
     if (collabMode !== next) {
       setCollabMode(next);
     }
-  }, [searchParams, collabMode]);
+  }, [searchParams, collabMode, collabShareId]);
 
   useEffect(() => {
     setLayout((prev) => {
-      if (collabMode === "view") {
+      const shouldBeReadOnly =
+        Boolean(version) || (collabEnabled && collabMode === "view");
+      if (shouldBeReadOnly) {
+        if (prev.readOnly) return prev;
         return { ...prev, readOnly: true };
       }
-      // Only release readOnly when not locked by version viewing
       if (prev.readOnly && !version) {
         return { ...prev, readOnly: false };
       }
       return prev;
     });
-  }, [collabMode, setLayout, version]);
+  }, [collabMode, collabEnabled, setLayout, version]);
 
   useEffect(() => {
     if (
@@ -731,12 +804,20 @@ export default function WorkSpace() {
               />
             </div>
             <div className="absolute right-2 top-1">
-              <div className="flex items-center gap-2">
-                <CollabModeToggle
-                  mode={collabMode}
-                  onChange={handleCollabModeChange}
+              <div className="flex flex-col items-end gap-1">
+                <div className="flex items-center gap-2">
+                  <CollabModeToggle
+                    mode={collabMode}
+                    onChange={handleCollabModeChange}
+                  />
+                  <CollabStatus />
+                </div>
+                <CollabMetadata
+                  shareId={collabShareId}
+                  lastModified={remoteMeta?.updatedAt}
+                  revision={version || remoteMeta?.revision}
+                  isLoading={isLoadingRemote}
                 />
-                <CollabStatus />
               </div>
             </div>
           </div>

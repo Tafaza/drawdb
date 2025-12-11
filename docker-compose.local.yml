@@ -16,7 +16,7 @@ services:
     restart: unless-stopped
     environment:
       VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://localhost:5000}
-      VITE_COLLAB_WS_URL: ${VITE_COLLAB_WS_URL:-ws://localhost:4000/collab}
+      VITE_COLLAB_WS_URL: ${VITE_COLLAB_WS_URL:-ws://localhost:4000}
     ports:
       - "3000:80"
     depends_on:

@@ -179,6 +179,7 @@ const en = {
       "*For the time being loading only MySQL scripts is supported.",
     blank: "Blank",
     filename: "Filename",
+    revision: "Revision",
     table_w_no_name: "Declared a table with no name",
     duplicate_table_by_name: "Duplicate table by the name '{{tableName}}'",
     empty_field_name: "Empty field `name` in table '{{tableName}}'",
