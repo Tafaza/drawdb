@@ -12,18 +12,19 @@ export const CollabContext = createContext({
   sendOp: () => {},
 });
 
-export function CollabProvider({ shareId, mode = "edit", onRemoteOp, children }) {
+export function CollabProvider({
+  shareId,
+  mode = "edit",
+  clientId: clientIdProp,
+  onRemoteOp,
+  children,
+}) {
   const [connection, setConnection] = useState("disabled");
   const [participants, setParticipants] = useState({});
   const [lastError, setLastError] = useState(null);
   const clientRef = useRef(null);
-  const clientId = useMemo(() => {
-    const stored = localStorage.getItem("collabClientId");
-    if (stored) return stored;
-    const id = nanoid();
-    localStorage.setItem("collabClientId", id);
-    return id;
-  }, []);
+  const clientIdRef = useRef(clientIdProp || nanoid());
+  const clientId = clientIdRef.current;
 
   const enabled = Boolean(import.meta.env.VITE_COLLAB_WS_URL && shareId);
   const modeFromParam = mode === "view" ? "view" : "edit";

@@ -63,8 +63,9 @@ const persistRoom = async (shareId) => {
   const room = rooms.get(shareId);
   if (!room || !room.diagram || !room.dirty) return;
 
+  const snapshot = room.diagram;
   // Strip viewport before persisting to gist to avoid noisy updates
-  const payloadDiagram = { ...room.diagram };
+  const payloadDiagram = { ...snapshot };
   delete payloadDiagram.transform;
 
   try {
@@ -82,9 +83,11 @@ const persistRoom = async (shareId) => {
       console.warn(`[collab] persist failed for ${shareId}: ${res.status} ${res.statusText}`);
       return;
     }
-    room.dirty = false;
-    room.opCount = 0;
-    room.lastFlushed = now();
+    if (room.diagram === snapshot) {
+      room.dirty = false;
+      room.opCount = 0;
+      room.lastFlushed = now();
+    }
   } catch (e) {
     console.warn(`[collab] persist error for ${shareId}`, e);
   }

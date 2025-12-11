@@ -94,21 +94,11 @@ export default function WorkSpace() {
     [collabShareId],
   );
   const applyingRemoteRef = useRef(false);
-  const collabClientIdRef = useRef(null);
+  const collabClientIdRef = useRef(nanoid());
   const transformRef = useRef(transform);
   useEffect(() => {
     transformRef.current = transform;
   }, [transform]);
-  if (collabClientIdRef.current === null) {
-    const stored = localStorage.getItem("collabClientId");
-    if (stored) {
-      collabClientIdRef.current = stored;
-    } else {
-      const id = nanoid();
-      localStorage.setItem("collabClientId", id);
-      collabClientIdRef.current = id;
-    }
-  }
   const handleResize = (e) => {
     if (!resize) return;
     const w = isRtl(i18n.language) ? window.innerWidth - e.clientX : e.clientX;
@@ -779,13 +769,16 @@ export default function WorkSpace() {
 
     if (applyingRemoteRef.current) return;
 
-    if (settings.autosave) {
+    const shouldAutosave = settings.autosave || collabEnabled;
+
+    if (shouldAutosave) {
       setSaveState(State.SAVING);
     }
   }, [
     undoStack,
     redoStack,
     settings.autosave,
+    collabEnabled,
     tables?.length,
     areas?.length,
     notes?.length,
@@ -835,6 +828,7 @@ export default function WorkSpace() {
     <CollabProvider
       shareId={collabShareId}
       mode={collabMode}
+      clientId={collabClientIdRef.current}
       onRemoteOp={handleRemoteOp}
     >
       <CollabAutoViewGuard
