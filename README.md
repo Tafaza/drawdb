@@ -64,6 +64,18 @@ docker build -t drawdb .
 docker run -p 3000:80 drawdb
 ```
 
+### Local full stack (Docker Compose)
+
+Run the frontend + collab WS + backend locally in containers (good for testing sharing/collab):
+
+1. Clone this repo and `drawdb-server` side by side (e.g., `~/dev/drawdb-stack/drawdb` and `~/dev/drawdb-stack/drawdb-server`).
+2. Create a `.env` next to `docker-compose.local.yml` if you need overrides like `VITE_BACKEND_URL`, `VITE_COLLAB_WS_URL`, `PORT`, `COLLAB_PORT`, `CLIENT_URLS`, or `GITHUB_TOKEN` (required for gist sharing/revisions to show up).
+3. From `drawdb/`, run `docker compose -f docker-compose.local.yml up --build -d`.
+   - Frontend: http://localhost:3000
+   - Backend API: http://localhost:5000
+   - Collab WS: ws://localhost:4000
+4. Iterating on code: backend hot-reloads via the volume mount + `npm run dev`; frontend/collab server changes need a rebuild (`docker compose -f docker-compose.local.yml up --build -d`).
+
 ### Sharing backend (drawdb-server)
 
 If you want to enable sharing, you need the optional [drawdb-server](https://github.com/drawdb-io/drawdb-server) running and a GitHub token with gist scope:

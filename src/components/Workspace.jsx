@@ -26,13 +26,12 @@ import { useTranslation } from "react-i18next";
 import { databases } from "../data/databases";
 import { isRtl } from "../i18n/utils/rtl";
 import { useSearchParams } from "react-router-dom";
-import { get, SHARE_FILENAME } from "../api/gists";
+import { get, getCommits, SHARE_FILENAME } from "../api/gists";
 import { nanoid } from "nanoid";
 import { CollabProvider } from "../context/CollabContext";
 import CollabStatus from "./Collab/CollabStatus";
 import { useCollab } from "../hooks/useCollab";
 import CollabModeToggle from "./Collab/CollabModeToggle";
-import CollabMetadata from "./Collab/CollabMetadata";
 
 export const IdContext = createContext({
   gistId: "",
@@ -550,9 +549,23 @@ export default function WorkSpace() {
       try {
         const { data } = await get(shareId);
         const latestHistory = data?.history?.[0];
-        const revision = latestHistory?.version || data?.version;
-        const updatedAt =
+        let revision = latestHistory?.version || data?.version;
+        let updatedAt =
           latestHistory?.committed_at || data?.updated_at || data?.updatedAt;
+
+        if (!revision) {
+          try {
+            const commits = await getCommits(shareId, 1, 1);
+            const latestCommit = commits?.data?.[0];
+            if (latestCommit?.version) {
+              revision = latestCommit.version;
+              updatedAt = updatedAt ?? latestCommit.committed_at;
+            }
+          } catch (err) {
+            console.log(err);
+          }
+        }
+
         if (revision || updatedAt) {
           setRemoteMeta({
             revision: revision ?? "",
@@ -801,6 +814,12 @@ export default function WorkSpace() {
                 lastSaved={lastSaved}
                 setLastSaved={setLastSaved}
                 hideSaveState={Boolean(collabShareId)}
+                collabMetadata={{
+                  shareId: collabShareId,
+                  lastModified: remoteMeta?.updatedAt,
+                  revision: version || remoteMeta?.revision,
+                  isLoading: isLoadingRemote,
+                }}
               />
             </div>
             <div className="absolute right-2 top-1">
@@ -812,12 +831,6 @@ export default function WorkSpace() {
                   />
                   <CollabStatus />
                 </div>
-                <CollabMetadata
-                  shareId={collabShareId}
-                  lastModified={remoteMeta?.updatedAt}
-                  revision={version || remoteMeta?.revision}
-                  isLoading={isLoadingRemote}
-                />
               </div>
             </div>
           </div>

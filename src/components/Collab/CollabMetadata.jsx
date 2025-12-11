@@ -23,7 +23,7 @@ export default function CollabMetadata({
   }
 
   return (
-    <div className="text-xs text-gray-500 flex items-center gap-2">
+    <div className="text-xs text-gray-500 flex items-center gap-2 min-w-0">
       {isLoading && (
         <>
           <Spin size="small" />

@@ -1,5 +1,3 @@
-version: "3.9"
-
 # Local full-stack setup (frontend + collab + backend).
 # Assumes this repo lives in a folder alongside a clone of drawdb-server:
 #   ~/dev/drawdb-stack/

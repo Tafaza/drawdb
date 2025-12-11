@@ -71,6 +71,7 @@ import { IconAddArea, IconAddNote, IconAddTable } from "../../icons";
 import LayoutDropdown from "./LayoutDropdown";
 import Sidesheet from "./SideSheet/Sidesheet";
 import Modal from "./Modal/Modal";
+import CollabMetadata from "../Collab/CollabMetadata";
 import { useTranslation } from "react-i18next";
 import { exportSQL } from "../../utils/exportSQL";
 import { databases } from "../../data/databases";
@@ -93,6 +94,7 @@ export default function ControlPanel({
   setTitle,
   lastSaved,
   hideSaveState = false,
+  collabMetadata = {},
 }) {
   const [modal, setModal] = useState(MODAL.NONE);
   const [sidesheet, setSidesheet] = useState(SIDESHEET.NONE);
@@ -1950,7 +1952,7 @@ export default function ControlPanel({
   function header() {
     return (
       <nav
-        className="flex justify-between pt-1 items-center whitespace-nowrap"
+        className="flex justify-between pt-1 items-start whitespace-nowrap"
         style={isRtl(i18n.language) ? { direction: "rtl" } : {}}
       >
         <div className="flex justify-start items-center">
@@ -2128,23 +2130,26 @@ export default function ControlPanel({
                   </Dropdown>
                 ))}
               </div>
-              {layout.readOnly && <Tag size="small">{t("read_only")}</Tag>}
-              {!layout.readOnly && !hideSaveState && (
-                <Tag
-                  size="small"
-                  type="light"
-                  prefixIcon={
-                    saveState === State.LOADING ||
-                    saveState === State.SAVING ? (
-                      <Spin size="small" />
-                    ) : null
-                  }
-                >
-                  {getState()}
-                </Tag>
-              )}
             </div>
           </div>
+        </div>
+        <div className="flex items-center gap-2 ms-3">
+          {layout.readOnly && <Tag size="small">{t("read_only")}</Tag>}
+          {!layout.readOnly && !hideSaveState && (
+            <Tag
+              size="small"
+              type="light"
+              prefixIcon={
+                saveState === State.LOADING ||
+                saveState === State.SAVING ? (
+                  <Spin size="small" />
+                ) : null
+              }
+            >
+              {getState()}
+            </Tag>
+          )}
+          <CollabMetadata {...collabMetadata} />
         </div>
       </nav>
     );
