@@ -115,6 +115,39 @@ export default function WorkSpace() {
     if (w > SIDEPANEL_MIN_WIDTH) setWidth(w);
   };
 
+  const refreshRemoteMeta = useCallback(async () => {
+    if (!collabShareId) return;
+    try {
+      const { data } = await get(collabShareId);
+      const latestHistory = data?.history?.[0];
+      let revision = latestHistory?.version || data?.version;
+      let updatedAt =
+        latestHistory?.committed_at || data?.updated_at || data?.updatedAt;
+
+      if (!revision) {
+        try {
+          const commits = await getCommits(collabShareId, 1, 1);
+          const latestCommit = commits?.data?.[0];
+          if (latestCommit?.version) {
+            revision = latestCommit.version;
+            updatedAt = updatedAt ?? latestCommit.committed_at;
+          }
+        } catch (err) {
+          console.log(err);
+        }
+      }
+
+      if (revision || updatedAt) {
+        setRemoteMeta({
+          revision: revision ?? "",
+          updatedAt: updatedAt ?? "",
+        });
+      }
+    } catch (e) {
+      console.log(e);
+    }
+  }, [collabShareId]);
+
   const setCollabModeParam = useCallback(
     (nextMode) => {
       const params = new URLSearchParams(searchParams);
@@ -710,6 +743,14 @@ export default function WorkSpace() {
       setCollabMode(next);
     }
   }, [searchParams, collabMode, collabShareId]);
+
+  useEffect(() => {
+    if (!collabShareId) return;
+
+    refreshRemoteMeta();
+    const interval = setInterval(refreshRemoteMeta, 15000);
+    return () => clearInterval(interval);
+  }, [collabShareId, refreshRemoteMeta]);
 
   useEffect(() => {
     setLayout((prev) => {
