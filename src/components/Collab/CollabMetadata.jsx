@@ -6,6 +6,7 @@ export default function CollabMetadata({
   shareId,
   lastModified,
   revision,
+  revisionIndex,
   isLoading,
 }) {
   const { t, i18n } = useTranslation();
@@ -37,10 +38,14 @@ export default function CollabMetadata({
           </span>
         </Tooltip>
       )}
-      {!isLoading && revision && (
-        <Tooltip content={`${t("revision")}: ${revision}`}>
+      {!isLoading && (revisionIndex || revision) && (
+        <Tooltip
+          content={`${t("revision")}: ${
+            revisionIndex ? `#${revisionIndex}` : revision
+          }${revision ? ` (${revision.substring(0, 7)})` : ""}`}
+        >
           <Tag size="small" type="light">
-            rev {revision.substring(0, 7)}
+            {revisionIndex ? `rev #${revisionIndex}` : `rev ${revision.substring(0, 7)}`}
           </Tag>
         </Tooltip>
       )}
