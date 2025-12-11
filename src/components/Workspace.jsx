@@ -77,17 +77,18 @@ export default function WorkSpace() {
   const { undoStack, redoStack, setUndoStack, setRedoStack } = useUndoRedo();
   const { t, i18n } = useTranslation();
   let [searchParams, setSearchParams] = useSearchParams();
+  const shareIdParam = searchParams.get("shareId");
   const [collabMode, setCollabMode] = useState(() => {
     const paramMode = searchParams.get("mode");
     if (paramMode === "view") return "view";
-    if (searchParams.get("shareId")) return "view";
+    if (shareIdParam) return "view";
     const stored = localStorage.getItem("collabMode");
     return stored === "view" ? "view" : "edit";
   });
   const userSelectedModeRef = useRef(Boolean(searchParams.get("mode")));
   const collabShareId = useMemo(
-    () => gistId || loadedFromGistId || searchParams.get("shareId"),
-    [gistId, loadedFromGistId, searchParams],
+    () => gistId || loadedFromGistId || shareIdParam,
+    [gistId, loadedFromGistId, shareIdParam],
   );
   const collabEnabled = useMemo(
     () => Boolean(import.meta.env.VITE_COLLAB_WS_URL && collabShareId),
@@ -658,7 +659,7 @@ export default function WorkSpace() {
       return true;
     };
 
-    const shareId = searchParams.get("shareId");
+    const shareId = shareIdParam;
     if (shareId) {
       const existingDiagram = await db.diagrams.get({
         loadedFromGistId: shareId,
@@ -713,7 +714,7 @@ export default function WorkSpace() {
     setEnums,
     selectedDb,
     setSaveState,
-    searchParams,
+    shareIdParam,
   ]);
 
   const returnToCurrentDiagram = async () => {
