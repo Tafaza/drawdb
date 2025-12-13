@@ -81,6 +81,7 @@ export default function WorkSpace() {
   const [collabMode, setCollabMode] = useState(() => {
     const paramMode = searchParams.get("mode");
     if (paramMode === "view") return "view";
+    if (paramMode === "edit") return "edit";
     if (shareIdParam) return "view";
     const stored = localStorage.getItem("collabMode");
     return stored === "view" ? "view" : "edit";
@@ -94,6 +95,11 @@ export default function WorkSpace() {
     () => Boolean(import.meta.env.VITE_COLLAB_WS_URL && collabShareId),
     [collabShareId],
   );
+  const [collabEffectiveMode, setCollabEffectiveMode] = useState(collabMode);
+  const [collabConnection, setCollabConnection] = useState("disabled");
+  const collabApiRef = useRef(null);
+  const [collabRoomVersion, setCollabRoomVersion] = useState(0);
+  const [collabLastPersistedVersion, setCollabLastPersistedVersion] = useState(0);
   const applyingRemoteRef = useRef(false);
   const collabClientIdRef = useRef(nanoid());
   const collabVersionRef = useRef(0);
@@ -148,7 +154,9 @@ export default function WorkSpace() {
   const setCollabModeParam = useCallback(
     (nextMode) => {
       const params = new URLSearchParams(searchParams);
-      if (nextMode === "view") {
+      if (params.get("shareId")) {
+        params.set("mode", nextMode);
+      } else if (nextMode === "view") {
         params.set("mode", "view");
       } else {
         params.delete("mode");
@@ -163,9 +171,32 @@ export default function WorkSpace() {
   const handleCollabModeChange = useCallback(
     (nextMode) => {
       userSelectedModeRef.current = true;
+
+      if (
+        nextMode === "view" &&
+        collabEnabled &&
+        collabConnection === "open" &&
+        collabEffectiveMode === "edit" &&
+        collabRoomVersion > collabLastPersistedVersion
+      ) {
+        collabApiRef.current?.persistNow?.();
+        collabApiRef.current?.releaseEdit?.();
+        setTimeout(() => {
+          setCollabModeParam(nextMode);
+        }, 200);
+        return;
+      }
+
       setCollabModeParam(nextMode);
     },
-    [setCollabModeParam],
+    [
+      collabConnection,
+      collabEffectiveMode,
+      collabEnabled,
+      collabLastPersistedVersion,
+      collabRoomVersion,
+      setCollabModeParam,
+    ],
   );
 
   const autoSwitchToView = useCallback(
@@ -247,15 +278,20 @@ export default function WorkSpace() {
   const handleRemoteOp = useCallback(
     (message) => {
       if (!message?.op) return;
-      if (message.clientId && message.clientId === collabClientIdRef.current) return;
 
       const incomingVersion = message.op?.version ?? 0;
       if (incomingVersion && incomingVersion <= collabVersionRef.current) return;
 
+      if (incomingVersion) {
+        collabVersionRef.current = incomingVersion;
+        setCollabRoomVersion(incomingVersion);
+      }
+
+      if (message.clientId && message.clientId === collabClientIdRef.current) {
+        return;
+      }
+
       if (message.op.kind === "doc:replace") {
-        if (incomingVersion) {
-          collabVersionRef.current = incomingVersion;
-        }
         applyDiagramState(message.op.diagram);
         setCollabSyncReady(true);
         setCollabDirty(false);
@@ -283,7 +319,6 @@ export default function WorkSpace() {
       ...(databases[database].hasTypes && { types }),
       ...(databases[database].hasEnums && { enums }),
       todos: tasks,
-      transform,
     };
   }, [
     areas,
@@ -294,7 +329,6 @@ export default function WorkSpace() {
     tables,
     tasks,
     title,
-    transform,
     types,
   ]);
 
@@ -427,8 +461,8 @@ export default function WorkSpace() {
           setTitle(d.name);
           setTables(d.tables);
           setRelationships(d.references);
-          setNotes(d.notes);
-          setAreas(d.areas);
+          setNotes(d.notes ?? []);
+          setAreas(d.subjectAreas ?? d.areas ?? []);
           setTasks(d.todos ?? []);
           setTransform({ pan: d.pan, zoom: d.zoom });
           if (databases[database].hasTypes) {
@@ -488,8 +522,8 @@ export default function WorkSpace() {
           setTitle(diagram.name);
           setTables(diagram.tables);
           setRelationships(diagram.references);
-          setAreas(diagram.areas);
-          setNotes(diagram.notes);
+          setAreas(diagram.subjectAreas ?? diagram.areas ?? []);
+          setNotes(diagram.notes ?? []);
           setTasks(diagram.todos ?? []);
           setTransform({
             pan: diagram.pan,
@@ -544,9 +578,9 @@ export default function WorkSpace() {
             setTitle(diagram.title);
             setTables(diagram.tables);
             setRelationships(diagram.relationships);
-            setAreas(diagram.subjectAreas);
+            setAreas(diagram.subjectAreas ?? diagram.areas ?? []);
             setTasks(diagram.todos ?? []);
-            setNotes(diagram.notes);
+            setNotes(diagram.notes ?? []);
             setTransform({
               zoom: 1,
               pan: { x: 0, y: 0 },
@@ -628,8 +662,8 @@ export default function WorkSpace() {
         setTitle(parsedDiagram.title);
         setTables(parsedDiagram.tables);
         setRelationships(parsedDiagram.relationships);
-        setNotes(parsedDiagram.notes);
-        setAreas(parsedDiagram.subjectAreas);
+        setNotes(parsedDiagram.notes ?? []);
+        setAreas(parsedDiagram.subjectAreas ?? parsedDiagram.areas ?? []);
         setTasks(parsedDiagram.todos ?? []);
         setTransform(
           parsedDiagram.transform ?? { pan: { x: 0, y: 0 }, zoom: 1 },
@@ -746,6 +780,13 @@ export default function WorkSpace() {
       }
       return;
     }
+    if (paramMode === "edit") {
+      if (collabMode !== "edit") {
+        setCollabMode("edit");
+        localStorage.setItem("collabMode", "edit");
+      }
+      return;
+    }
 
     if (collabShareId) return;
 
@@ -760,9 +801,12 @@ export default function WorkSpace() {
     if (!collabShareId) return;
 
     refreshRemoteMeta();
-    const interval = setInterval(refreshRemoteMeta, 120000);
-    return () => clearInterval(interval);
-  }, [collabShareId, refreshRemoteMeta]);
+    if (!collabEnabled) {
+      const interval = setInterval(refreshRemoteMeta, 120000);
+      return () => clearInterval(interval);
+    }
+    return undefined;
+  }, [collabShareId, refreshRemoteMeta, collabEnabled]);
 
   useEffect(() => {
     collabVersionRef.current = 0;
@@ -773,7 +817,7 @@ export default function WorkSpace() {
   useEffect(() => {
     setLayout((prev) => {
       const shouldBeReadOnly =
-        Boolean(version) || (collabEnabled && collabMode === "view");
+        Boolean(version) || (collabEnabled && collabEffectiveMode === "view");
       if (shouldBeReadOnly) {
         if (prev.readOnly) return prev;
         return { ...prev, readOnly: true };
@@ -783,7 +827,7 @@ export default function WorkSpace() {
       }
       return prev;
     });
-  }, [collabMode, collabEnabled, setLayout, version]);
+  }, [collabEnabled, collabEffectiveMode, setLayout, version]);
 
   useEffect(() => {
     if (
@@ -857,10 +901,34 @@ export default function WorkSpace() {
       shareId={collabShareId}
       mode={collabMode}
       clientId={collabClientIdRef.current}
-      onPersisted={() => {
+      apiRef={collabApiRef}
+      onConnection={setCollabConnection}
+      onMode={(message) => {
+        const next = message?.mode === "edit" ? "edit" : "view";
+        setCollabEffectiveMode(next);
+        if (typeof message?.roomVersion === "number") {
+          collabVersionRef.current = message.roomVersion;
+          setCollabRoomVersion(message.roomVersion);
+        }
+        if (typeof message?.lastPersistedVersion === "number") {
+          setCollabLastPersistedVersion(message.lastPersistedVersion);
+        }
+        if (next === "view" && collabMode === "edit") {
+          autoSwitchToView();
+        }
+      }}
+      onPersisted={(message) => {
         setCollabDirty(false);
         setCollabPersistError(false);
-        refreshRemoteMeta();
+        if (typeof message?.persistedVersion === "number") {
+          setCollabLastPersistedVersion(message.persistedVersion);
+        }
+        if (!message?.noChanges && (message?.revision || message?.updatedAt)) {
+          setRemoteMeta((prev) => ({
+            revision: message.revision ?? prev?.revision ?? "",
+            updatedAt: message.updatedAt ?? prev?.updatedAt ?? "",
+          }));
+        }
       }}
       onPersistError={() => {
         setCollabPersistError(true);
@@ -890,8 +958,13 @@ export default function WorkSpace() {
                   lastModified: remoteMeta?.updatedAt,
                   revision: version || remoteMeta?.revision,
                   isLoading: isLoadingRemote,
-                  dirty: collabDirty,
+                  dirty: collabEnabled && collabRoomVersion > collabLastPersistedVersion,
                   persistError: collabPersistError,
+                  canPersistNow:
+                    collabEnabled &&
+                    collabConnection === "open" &&
+                    collabEffectiveMode === "edit",
+                  onPersistNow: () => collabApiRef.current?.persistNow?.(),
                 }}
               />
             </div>
@@ -909,7 +982,6 @@ export default function WorkSpace() {
           </div>
         </IdContext.Provider>
         <CollabEmitter
-          mode={collabMode}
           buildSnapshot={buildDiagramSnapshot}
           applyingRemoteRef={applyingRemoteRef}
           canSync={collabSyncReady}
@@ -1033,8 +1105,9 @@ export default function WorkSpace() {
   );
 }
 
-function CollabEmitter({ mode, buildSnapshot, applyingRemoteRef, canSync, onSend }) {
-  const { enabled, connection, sendOp } = useCollab();
+function CollabEmitter({ buildSnapshot, applyingRemoteRef, canSync, onSend }) {
+  const { enabled, connection, effectiveMode, sendOp } = useCollab();
+  const { layout } = useLayout();
   const lastSentRef = useRef(null);
   const buildSnapshotRef = useRef(buildSnapshot);
 
@@ -1043,7 +1116,13 @@ function CollabEmitter({ mode, buildSnapshot, applyingRemoteRef, canSync, onSend
   }, [buildSnapshot]);
 
   useEffect(() => {
-    if (!enabled || mode === "view" || connection !== "open" || !canSync)
+    if (
+      !enabled ||
+      effectiveMode !== "edit" ||
+      layout.readOnly ||
+      connection !== "open" ||
+      !canSync
+    )
       return undefined;
 
     const syncInterval = setInterval(() => {
@@ -1062,7 +1141,7 @@ function CollabEmitter({ mode, buildSnapshot, applyingRemoteRef, canSync, onSend
     return () => {
       clearInterval(syncInterval);
     };
-  }, [enabled, connection, mode, sendOp, applyingRemoteRef, canSync]);
+  }, [enabled, effectiveMode, layout.readOnly, connection, sendOp, applyingRemoteRef, canSync, onSend]);
 
   return null;
 }

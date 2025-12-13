@@ -12,7 +12,34 @@ import {
 } from "../../../hooks";
 import { databases } from "../../../data/databases";
 import { MODAL } from "../../../data/constants";
-import { create, patch, SHARE_FILENAME } from "../../../api/gists";
+import { create, get, patch, SHARE_FILENAME } from "../../../api/gists";
+
+function sortKeysDeep(value) {
+  if (Array.isArray(value)) return value.map(sortKeysDeep);
+  if (!value || typeof value !== "object") return value;
+  const sorted = {};
+  Object.keys(value)
+    .sort()
+    .forEach((key) => {
+      sorted[key] = sortKeysDeep(value[key]);
+    });
+  return sorted;
+}
+
+function normalizeJsonString(value) {
+  if (typeof value !== "string") return "";
+  try {
+    const parsed = JSON.parse(value);
+    return JSON.stringify(sortKeysDeep(parsed));
+  } catch (e) {
+    return value.trim();
+  }
+}
+
+function coalescePayload(raw) {
+  if (!raw) return {};
+  return raw.data || raw;
+}
 
 export default function Share({ title, setModal }) {
   const { t } = useTranslation();
@@ -24,8 +51,10 @@ export default function Share({ title, setModal }) {
   const { types } = useTypes();
   const { enums } = useEnums();
   const [error, setError] = useState(null);
-  const url =
+  const baseUrl =
     window.location.origin + window.location.pathname + "?shareId=" + gistId;
+  const viewUrl = baseUrl + "&mode=view";
+  const editUrl = baseUrl + "&mode=edit";
 
   const diagramToString = useCallback(() => {
     return JSON.stringify(
@@ -74,7 +103,14 @@ export default function Share({ title, setModal }) {
           const id = await create(SHARE_FILENAME, diagramToString());
           setGistId(id);
         } else {
-          await patch(gistId, SHARE_FILENAME, diagramToString());
+          const raw = await get(gistId);
+          const payload = coalescePayload(raw);
+          const existing = payload.files?.[SHARE_FILENAME]?.content ?? "";
+          const next = diagramToString();
+
+          if (normalizeJsonString(existing) !== normalizeJsonString(next)) {
+            await patch(gistId, SHARE_FILENAME, next);
+          }
         }
       } catch (e) {
         setError(e);
@@ -86,9 +122,9 @@ export default function Share({ title, setModal }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const copyLink = () => {
+  const copyLink = (value) => {
     navigator.clipboard
-      .writeText(url)
+      .writeText(value)
       .then(() => {
         Toast.success(t("copied_to_clipboard"));
       })
@@ -117,16 +153,24 @@ export default function Share({ title, setModal }) {
       )}
       {!error && (
         <>
-          <div className="flex gap-3">
-            <Input value={url} size="large" readonly />
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              <Input value={viewUrl} size="large" readOnly />
+              <Button theme="solid" icon={<IconLink />} onClick={() => copyLink(viewUrl)}>
+                {t("copy_link")}
+              </Button>
+            </div>
+            <div className="flex gap-2">
+              <Input value={editUrl} size="large" readOnly />
+              <Button theme="solid" icon={<IconLink />} onClick={() => copyLink(editUrl)}>
+                {t("copy_link")}
+              </Button>
+            </div>
           </div>
           <div className="text-xs mt-2">{t("share_info")}</div>
           <div className="flex gap-2 mt-3">
             <Button block onClick={unshare}>
               {t("unshare")}
-            </Button>
-            <Button block theme="solid" icon={<IconLink />} onClick={copyLink}>
-              {t("copy_link")}
             </Button>
           </div>
         </>

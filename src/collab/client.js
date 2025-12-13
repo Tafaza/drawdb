@@ -13,6 +13,7 @@ export class CollabClient {
     this.socket = null;
     this.reconnectAttempts = 0;
     this.pending = [];
+    this.pendingDocReplace = null;
     this.heartbeatInterval = null;
     this.reconnectTimeout = null;
     this.isConnecting = false;
@@ -125,6 +126,10 @@ export class CollabClient {
   send(type, payload) {
     const message = { type, shareId: this.shareId, clientId: this.clientId, ...payload };
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+      if (message.type === "op" && message.op?.kind === "doc:replace") {
+        this.pendingDocReplace = message;
+        return;
+      }
       if (this.pending.length < 100) {
         this.pending.push(message);
       }
@@ -144,10 +149,13 @@ export class CollabClient {
   }
 
   _flushPending() {
-    if (!this.pending.length) return;
+    if (!this.pending.length && !this.pendingDocReplace) return;
     const queued = [...this.pending];
+    const docReplace = this.pendingDocReplace;
     this.pending = [];
+    this.pendingDocReplace = null;
     queued.forEach((msg) => this._send(msg));
+    if (docReplace) this._send(docReplace);
   }
 
   _scheduleReconnect() {

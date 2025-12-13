@@ -1,4 +1,4 @@
-import { Spin, Tag, Tooltip } from "@douyinfe/semi-ui";
+import { Button, Spin, Tag, Tooltip } from "@douyinfe/semi-ui";
 import { DateTime } from "luxon";
 import { useTranslation } from "react-i18next";
 
@@ -9,6 +9,8 @@ export default function CollabMetadata({
   isLoading,
   dirty = false,
   persistError = false,
+  canPersistNow = false,
+  onPersistNow,
 }) {
   const { t, i18n } = useTranslation();
 
@@ -40,14 +42,23 @@ export default function CollabMetadata({
         </Tooltip>
       )}
       {!isLoading && dirty && (
-        <Tag size="small" type="light" color="orange">
-          {t("saving")}
-        </Tag>
+        <Tooltip content="Not yet persisted to gist">
+          <Tag size="small" type="light" color="orange">
+            Pending gist save
+          </Tag>
+        </Tooltip>
       )}
       {!isLoading && persistError && (
         <Tag size="small" type="danger">
           {t("failed_to_save")}
         </Tag>
+      )}
+      {!isLoading && onPersistNow && (
+        <Tooltip content="Save to gist">
+          <Button size="small" disabled={!canPersistNow} onClick={onPersistNow}>
+            {t("save")}
+          </Button>
+        </Tooltip>
       )}
       {!isLoading && revision && (
         <Tooltip content={`${t("revision")}: ${revision}`}>

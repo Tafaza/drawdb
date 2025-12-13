@@ -7,10 +7,16 @@ export const CollabContext = createContext({
   connection: "disabled",
   clientId: "",
   participants: {},
+  requestedMode: "edit",
+  effectiveMode: "edit",
   mode: "edit",
+  editorClientId: null,
   lastError: null,
   persist: { status: "idle", lastFlushed: null },
   sendOp: () => {},
+  persistNow: () => {},
+  requestEdit: () => {},
+  releaseEdit: () => {},
 });
 
 export function CollabProvider({
@@ -20,12 +26,17 @@ export function CollabProvider({
   onRemoteOp,
   onPersisted,
   onPersistError,
+  onMode,
+  onConnection,
+  apiRef,
   children,
 }) {
   const [connection, setConnection] = useState("disabled");
   const [participants, setParticipants] = useState({});
   const [lastError, setLastError] = useState(null);
   const [persist, setPersist] = useState({ status: "idle", lastFlushed: null });
+  const [effectiveMode, setEffectiveMode] = useState(mode === "view" ? "view" : "edit");
+  const [editorClientId, setEditorClientId] = useState(null);
   const clientRef = useRef(null);
   const clientIdRef = useRef(clientIdProp || nanoid());
   const clientId = clientIdRef.current;
@@ -38,6 +49,26 @@ export function CollabProvider({
     onRemoteOpRef.current = onRemoteOp;
   }, [onRemoteOp]);
 
+  const onPersistedRef = useRef(onPersisted);
+  useEffect(() => {
+    onPersistedRef.current = onPersisted;
+  }, [onPersisted]);
+
+  const onPersistErrorRef = useRef(onPersistError);
+  useEffect(() => {
+    onPersistErrorRef.current = onPersistError;
+  }, [onPersistError]);
+
+  const onModeRef = useRef(onMode);
+  useEffect(() => {
+    onModeRef.current = onMode;
+  }, [onMode]);
+
+  const onConnectionRef = useRef(onConnection);
+  useEffect(() => {
+    onConnectionRef.current = onConnection;
+  }, [onConnection]);
+
   const handleMessage = useCallback((message) => {
     if (!message?.type) return;
 
@@ -45,6 +76,13 @@ export function CollabProvider({
       case "presence":
         setParticipants(message.participants ?? {});
         break;
+      case "mode": {
+        const nextMode = message.mode === "edit" ? "edit" : "view";
+        setEffectiveMode(nextMode);
+        setEditorClientId(message.editorClientId ?? null);
+        onModeRef.current?.(message);
+        break;
+      }
       case "op":
         onRemoteOpRef.current?.(message);
         break;
@@ -52,25 +90,34 @@ export function CollabProvider({
         setLastError(message.error);
         break;
       case "persisted":
-        setPersist({ status: "ok", lastFlushed: message.lastFlushed ?? Date.now() });
-        onPersisted?.(message);
+        setPersist({
+          status: "ok",
+          lastFlushed: message.lastFlushed ?? Date.now(),
+          revision: message.revision ?? null,
+          updatedAt: message.updatedAt ?? null,
+          persistedVersion: message.persistedVersion ?? null,
+          noChanges: Boolean(message.noChanges),
+        });
+        onPersistedRef.current?.(message);
         break;
       case "persist_error":
         setPersist((prev) => ({
           status: "error",
           lastFlushed: prev.lastFlushed,
-          error: message.error,
+          error: message.message || message.error,
         }));
-        onPersistError?.(message);
+        onPersistErrorRef.current?.(message);
         break;
       default:
         break;
     }
-  }, [onPersisted, onPersistError]);
+  }, []);
 
   useEffect(() => {
     if (!enabled) {
       setConnection("disabled");
+      setEffectiveMode(modeFromParam);
+      setEditorClientId(null);
       return;
     }
 
@@ -80,7 +127,10 @@ export function CollabProvider({
       mode: modeFromParam,
       clientId,
       onMessage: handleMessage,
-      onStatus: setConnection,
+      onStatus: (status) => {
+        setConnection(status);
+        onConnectionRef.current?.(status);
+      },
     });
 
     clientRef.current = client;
@@ -97,18 +147,70 @@ export function CollabProvider({
     clientRef.current.send("op", { op });
   }, []);
 
+  const persistNow = useCallback(() => {
+    if (!clientRef.current) return;
+    setPersist((prev) => ({ ...prev, status: "saving" }));
+    clientRef.current.send("persist_now", {});
+  }, []);
+
+  const requestEdit = useCallback(() => {
+    if (!clientRef.current) return;
+    clientRef.current.send("request_edit", {});
+  }, []);
+
+  const releaseEdit = useCallback(() => {
+    if (!clientRef.current) return;
+    clientRef.current.send("release_edit", {});
+  }, []);
+
+  useEffect(() => {
+    if (!apiRef) return;
+    apiRef.current = {
+      persistNow,
+      requestEdit,
+      releaseEdit,
+      connection,
+      effectiveMode,
+      requestedMode: modeFromParam,
+      editorClientId,
+    };
+    return () => {
+      apiRef.current = null;
+    };
+  }, [apiRef, persistNow, requestEdit, releaseEdit, connection, effectiveMode, modeFromParam, editorClientId]);
+
   const value = useMemo(
     () => ({
       enabled,
       connection,
       clientId,
       participants,
-      mode: modeFromParam,
+      requestedMode: modeFromParam,
+      effectiveMode,
+      mode: effectiveMode,
+      editorClientId,
       lastError,
       persist,
       sendOp,
+      persistNow,
+      requestEdit,
+      releaseEdit,
     }),
-    [enabled, connection, clientId, participants, modeFromParam, lastError, persist, sendOp],
+    [
+      enabled,
+      connection,
+      clientId,
+      participants,
+      modeFromParam,
+      effectiveMode,
+      editorClientId,
+      lastError,
+      persist,
+      sendOp,
+      persistNow,
+      requestEdit,
+      releaseEdit,
+    ],
   );
 
   return <CollabContext.Provider value={value}>{children}</CollabContext.Provider>;
