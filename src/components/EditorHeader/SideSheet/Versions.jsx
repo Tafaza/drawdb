@@ -91,18 +91,19 @@ export default function Versions({ open, title, setTitle }) {
         const content = version.data.files[VERSION_FILENAME].content;
         const parsedDiagram = JSON.parse(content);
 
-        setTables(parsedDiagram.tables);
-        setRelationships(parsedDiagram.relationships);
-        setAreas(parsedDiagram.subjectAreas);
-        setNotes(parsedDiagram.notes);
-        setTitle(parsedDiagram.title);
+        setTables(parsedDiagram.tables ?? []);
+        setRelationships(parsedDiagram.relationships ?? []);
+        setAreas(parsedDiagram.subjectAreas ?? parsedDiagram.areas ?? []);
+        setNotes(parsedDiagram.notes ?? []);
+        setTitle(parsedDiagram.title ?? "Untitled Diagram");
 
-        if (databases[database].hasTypes) {
-          setTypes(parsedDiagram.types);
+        const databaseMeta = databases[database];
+        if (databaseMeta.hasTypes) {
+          setTypes(parsedDiagram.types ?? []);
         }
 
-        if (databases[database].hasEnums) {
-          setEnums(parsedDiagram.enums);
+        if (databaseMeta.hasEnums) {
+          setEnums(parsedDiagram.enums ?? []);
         }
       } catch (e) {
         Toast.error(t("failed_to_load_diagram"));

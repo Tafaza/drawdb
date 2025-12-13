@@ -10,6 +10,8 @@ const PERSIST_OPS_THRESHOLD = Number(process.env.PERSIST_OPS_THRESHOLD || 50);
 const PERSIST_ENABLED = Boolean(PERSIST_BASE_URL);
 const ROOM_IDLE_TTL_MS = Number(process.env.ROOM_IDLE_TTL_MS || 60000);
 const EDITOR_TTL_MS = Number(process.env.EDITOR_TTL_MS || 30000);
+const FORCE_EDIT_ENABLED = process.env.COLLAB_FORCE_EDIT_ENABLED === "true";
+const EDIT_REQUEST_DISMISS_MS = Number(process.env.COLLAB_EDIT_REQUEST_DISMISS_MS || 60000);
 
 if (!PERSIST_ENABLED) {
   console.warn("[collab] PERSIST_BASE_URL not set; collaboration will not persist changes");
@@ -25,6 +27,14 @@ const now = () => Date.now();
 const PERSIST_BACKOFF_BASE_MS = 10000;
 const PERSIST_BACKOFF_RATE_LIMIT_BASE_MS = 60000;
 const PERSIST_BACKOFF_MAX_MS = 5 * 60 * 1000;
+const CLIENT_NAME_MAX_LEN = 48;
+
+const sanitizeClientName = (value) => {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, CLIENT_NAME_MAX_LEN);
+};
 
 const schedulePersistBackoff = (room, status) => {
   const base =
@@ -116,6 +126,7 @@ const getRoom = (shareId) => {
       clients: new Set(),
       diagram: null,
       presence: new Map(),
+      dismissedEditRequests: new Map(),
       lastFlushed: 0,
       opCount: 0,
       dirty: false,
@@ -135,6 +146,16 @@ const getRoom = (shareId) => {
   return rooms.get(shareId);
 };
 
+const isEditRequestDismissed = (room, editorClientId, fromClientId) => {
+  if (!editorClientId || !fromClientId) return false;
+  const key = `${editorClientId}:${fromClientId}`;
+  const until = room.dismissedEditRequests.get(key) || 0;
+  if (!until) return false;
+  if (now() < until) return true;
+  room.dismissedEditRequests.delete(key);
+  return false;
+};
+
 const broadcast = (room, payload) => {
   const data = JSON.stringify(payload);
   for (const client of room.clients) {
@@ -149,7 +170,7 @@ const sendPresence = (shareId) => {
   if (!room) return;
   const participants = {};
   for (const [clientId, info] of room.presence.entries()) {
-    participants[clientId] = { lastSeen: info.lastSeen, mode: info.mode };
+    participants[clientId] = { lastSeen: info.lastSeen, mode: info.mode, name: info.name || "" };
   }
   broadcast(room, { type: "presence", participants });
 };
@@ -259,10 +280,14 @@ const roomMeta = (room) => ({
   updatedAt: room.lastPersistedUpdatedAt || null,
 });
 
-const setPresence = (room, clientId, lastSeen) => {
+const setPresence = (room, clientId, lastSeen, { clientName } = {}) => {
+  const prev = room.presence.get(clientId) || {};
+  const nextName =
+    clientName !== undefined ? sanitizeClientName(clientName) : prev.name || "";
   room.presence.set(clientId, {
     lastSeen,
     mode: room.editorClientId === clientId ? "edit" : "view",
+    name: nextName,
   });
 };
 
@@ -293,8 +318,22 @@ const ensureEditorValid = (room) => {
   }
 };
 
+const sendToClientId = (room, targetClientId, payload) => {
+  for (const client of room.clients) {
+    if (client.meta?.clientId === targetClientId && client.readyState === client.OPEN) {
+      sendJson(client, payload);
+    }
+  }
+};
+
 server.on("connection", (socket) => {
-  socket.meta = { shareId: null, clientId: null, requestedMode: "view", effectiveMode: "view" };
+  socket.meta = {
+    shareId: null,
+    clientId: null,
+    clientName: "",
+    requestedMode: "view",
+    effectiveMode: "view",
+  };
 
   socket.on("message", (raw) => {
     let message;
@@ -308,7 +347,7 @@ server.on("connection", (socket) => {
     if (!message.type) return;
 
     if (message.type === "hello") {
-      const { shareId, clientId, mode } = message;
+      const { shareId, clientId, mode, clientName } = message;
       if (!shareId || !clientId) {
         socket.send(JSON.stringify({ type: "error", error: "Missing shareId or clientId" }));
         return;
@@ -336,9 +375,15 @@ server.on("connection", (socket) => {
         }
       }
 
-      socket.meta = { shareId, clientId, requestedMode, effectiveMode };
+      socket.meta = {
+        shareId,
+        clientId,
+        clientName: sanitizeClientName(clientName),
+        requestedMode,
+        effectiveMode,
+      };
       room.clients.add(socket);
-      setPresence(room, clientId, now());
+      setPresence(room, clientId, now(), { clientName: socket.meta.clientName });
 
       sendJson(socket, {
         type: "mode",
@@ -373,6 +418,52 @@ server.on("connection", (socket) => {
         sendPresence(shareId);
         break;
       }
+      case "set_client_name": {
+        const nextName = sanitizeClientName(message.clientName);
+        socket.meta.clientName = nextName;
+        setPresence(room, clientId, now(), { clientName: nextName });
+        sendPresence(shareId);
+        break;
+      }
+      case "request_release": {
+        if (!room.editorClientId || room.editorClientId === clientId) break;
+        setPresence(room, clientId, now());
+        if (isEditRequestDismissed(room, room.editorClientId, clientId)) {
+          sendJson(socket, {
+            type: "edit_request_denied",
+            reason: "dismissed",
+            editorClientId: room.editorClientId,
+          });
+          sendPresence(shareId);
+          break;
+        }
+        sendToClientId(room, room.editorClientId, {
+          type: "edit_request",
+          fromClientId: clientId,
+          at: now(),
+        });
+        sendJson(socket, { type: "edit_request_sent", editorClientId: room.editorClientId });
+        sendPresence(shareId);
+        break;
+      }
+      case "dismiss_edit_request": {
+        if (!room.editorClientId) break;
+        if (room.editorClientId !== clientId) break;
+        const targetClientId = message.targetClientId;
+        if (!targetClientId) break;
+        room.dismissedEditRequests.set(
+          `${clientId}:${targetClientId}`,
+          now() + EDIT_REQUEST_DISMISS_MS,
+        );
+        sendJson(socket, { type: "edit_request_dismissed", targetClientId });
+        sendToClientId(room, targetClientId, {
+          type: "edit_request_denied",
+          reason: "dismissed",
+          editorClientId: clientId,
+        });
+        sendPresence(shareId);
+        break;
+      }
       case "request_edit": {
         ensureEditorValid(room);
         if (!room.editorClientId || room.editorClientId === clientId) {
@@ -398,6 +489,42 @@ server.on("connection", (socket) => {
             ...roomMeta(room),
           });
         }
+        sendPresence(shareId);
+        break;
+      }
+      case "force_edit": {
+        ensureEditorValid(room);
+        if (!FORCE_EDIT_ENABLED) {
+          sendJson(socket, {
+            type: "force_edit_denied",
+            reason: "disabled",
+            editorClientId: room.editorClientId ?? null,
+          });
+          break;
+        }
+
+        const prevEditor = room.editorClientId;
+        room.editorClientId = clientId;
+        room.editorSince = now();
+
+        for (const client of room.clients) {
+          const id = client.meta?.clientId;
+          if (!id) continue;
+          client.meta.effectiveMode = id === clientId ? "edit" : "view";
+          const prev = room.presence.get(id);
+          if (prev) {
+            room.presence.set(id, { ...prev, mode: id === clientId ? "edit" : "view" });
+          }
+        }
+
+        const meta = { editorClientId: clientId, ...roomMeta(room) };
+        broadcast(room, { type: "mode", mode: "view", reason: "forced", ...meta });
+        sendToClientId(room, clientId, { type: "mode", mode: "edit", reason: "forced", ...meta });
+
+        if (prevEditor && prevEditor !== clientId) {
+          sendToClientId(room, prevEditor, { type: "mode", mode: "view", reason: "forced", ...meta });
+        }
+
         sendPresence(shareId);
         break;
       }
@@ -476,8 +603,13 @@ server.on("connection", (socket) => {
     room.clients.delete(socket);
     room.presence.delete(clientId);
 
-    if (room.editorClientId === clientId) {
+    const wasEditor = room.editorClientId === clientId;
+    if (wasEditor) {
       releaseEditor(room, "expired");
+    }
+
+    if (wasEditor && room.clients.size > 0 && room.dirty) {
+      persistRoom(shareId, { force: true });
     }
 
     if (room.clients.size === 0) {

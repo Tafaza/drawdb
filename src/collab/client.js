@@ -2,11 +2,20 @@ const RECONNECT_DELAYS_MS = [1000, 2000, 5000, 10000];
 const MAX_RECONNECT_ATTEMPTS = 10;
 
 export class CollabClient {
-  constructor({ url, shareId, mode = "edit", clientId, onMessage, onStatus }) {
+  constructor({
+    url,
+    shareId,
+    mode = "edit",
+    clientId,
+    clientName = "",
+    onMessage,
+    onStatus,
+  }) {
     this.url = url;
     this.shareId = shareId;
     this.mode = mode;
     this.clientId = clientId;
+    this.clientName = clientName;
     this.onMessage = onMessage;
     this.onStatus = onStatus;
 
@@ -18,6 +27,22 @@ export class CollabClient {
     this.reconnectTimeout = null;
     this.isConnecting = false;
     this.isDisconnected = false; // prevent reconnect after explicit disconnect
+  }
+
+  setMode(mode) {
+    this.mode = mode === "view" ? "view" : "edit";
+  }
+
+  setClientName(clientName) {
+    this.clientName = clientName || "";
+    if (this.socket?.readyState === WebSocket.OPEN) {
+      this._send({
+        type: "set_client_name",
+        shareId: this.shareId,
+        clientId: this.clientId,
+        clientName: this.clientName,
+      });
+    }
   }
 
   connect() {
@@ -62,6 +87,7 @@ export class CollabClient {
         shareId: this.shareId,
         mode: this.mode,
         clientId: this.clientId,
+        clientName: this.clientName,
       });
       this._flushPending();
       this._startHeartbeat();
@@ -124,7 +150,13 @@ export class CollabClient {
   }
 
   send(type, payload) {
-    const message = { type, shareId: this.shareId, clientId: this.clientId, ...payload };
+    const message = {
+      type,
+      shareId: this.shareId,
+      clientId: this.clientId,
+      clientName: this.clientName,
+      ...payload,
+    };
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
       if (message.type === "op" && message.op?.kind === "doc:replace") {
         this.pendingDocReplace = message;

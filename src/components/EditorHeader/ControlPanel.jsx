@@ -95,6 +95,7 @@ export default function ControlPanel({
   lastSaved,
   hideSaveState = false,
   collabMetadata = {},
+  headerRight = null,
 }) {
   const [modal, setModal] = useState(MODAL.NONE);
   const [sidesheet, setSidesheet] = useState(SIDESHEET.NONE);
@@ -1701,21 +1702,24 @@ export default function ControlPanel({
       <div>
         {layout.header && (
           <div
-            className="flex justify-between items-center me-7"
+            className="flex justify-between items-center gap-2 flex-wrap"
             style={isRtl(i18n.language) ? { direction: "rtl" } : {}}
           >
-            {header()}
-            {window.name.split(" ")[0] !== "t" && (
-              <Button
-                type="primary"
-                className="!text-base me-2 !pe-6 !ps-5 !py-[18px] !rounded-md"
-                size="default"
-                icon={<IconShareStroked />}
-                onClick={() => setModal(MODAL.SHARE)}
-              >
-                {t("share")}
-              </Button>
-            )}
+            <div className="min-w-0 flex-1">{header()}</div>
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              {headerRight}
+              {window.name.split(" ")[0] !== "t" && (
+                <Button
+                  type="primary"
+                  className="!text-base me-2 !pe-6 !ps-5 !py-[18px] !rounded-md"
+                  size="default"
+                  icon={<IconShareStroked />}
+                  onClick={() => setModal(MODAL.SHARE)}
+                >
+                  {t("share")}
+                </Button>
+              )}
+            </div>
           </div>
         )}
         {layout.toolbar && toolbar()}

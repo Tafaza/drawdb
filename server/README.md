@@ -62,11 +62,23 @@ Depending on what you configure, you effectively get these modes:
 ## Message contract
 
 - Client → server:
-  - `hello`: `{ type: "hello", shareId, clientId, mode }`
+  - `hello`: `{ type: "hello", shareId, clientId, mode, clientName }`
   - `heartbeat`: `{ type: "heartbeat" }`
+  - `set_client_name`: `{ type: "set_client_name", clientName }`
   - `op`: `{ type: "op", op: { kind: "doc:replace", diagram } }`
+  - `request_edit`: `{ type: "request_edit" }` (try to acquire the single-editor lock)
+  - `release_edit`: `{ type: "release_edit" }` (release the lock if you hold it)
+  - `request_release`: `{ type: "request_release" }` (ask the current editor to release)
+  - `dismiss_edit_request`: `{ type: "dismiss_edit_request", targetClientId }` (editor dismisses a request)
+  - `force_edit`: `{ type: "force_edit" }` (steal the lock; requires `COLLAB_FORCE_EDIT_ENABLED=true`)
 
 - Server → client:
+  - `mode`: `{ type: "mode", mode: "edit" | "view", reason, editorClientId }`
   - `op`: `{ type: "op", clientId, op }` (echoed to all room participants)
-  - `presence`: `{ type: "presence", participants: Record<clientId, { lastSeen, mode }> }`
+  - `presence`: `{ type: "presence", participants: Record<clientId, { lastSeen, mode, name }> }`
+  - `edit_request`: `{ type: "edit_request", fromClientId, at }` (sent to the current editor)
+  - `edit_request_sent`: `{ type: "edit_request_sent", editorClientId }` (ack to requester)
+  - `edit_request_dismissed`: `{ type: "edit_request_dismissed", targetClientId }` (ack to editor)
+  - `edit_request_denied`: `{ type: "edit_request_denied", reason, editorClientId }` (sent to requester)
   - `error`: `{ type: "error", error }`
+  - `force_edit_denied`: `{ type: "force_edit_denied", reason, editorClientId }`

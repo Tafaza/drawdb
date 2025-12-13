@@ -26,12 +26,12 @@ import { useTranslation } from "react-i18next";
 import { databases } from "../data/databases";
 import { isRtl } from "../i18n/utils/rtl";
 import { useSearchParams } from "react-router-dom";
-import { get, getCommits, SHARE_FILENAME } from "../api/gists";
+import { get, getCommits, SHARE_FILENAME, VERSION_FILENAME } from "../api/gists";
 import { nanoid } from "nanoid";
 import { CollabProvider } from "../context/CollabContext";
 import CollabStatus from "./Collab/CollabStatus";
 import { useCollab } from "../hooks/useCollab";
-import CollabModeToggle from "./Collab/CollabModeToggle";
+import CollabEditActions from "./Collab/CollabEditActions";
 
 export const IdContext = createContext({
   gistId: "",
@@ -172,6 +172,11 @@ export default function WorkSpace() {
     (nextMode) => {
       userSelectedModeRef.current = true;
 
+      if (nextMode === "edit" && collabEnabled && collabConnection === "open") {
+        collabApiRef.current?.requestEdit?.();
+        collabApiRef.current?.requestRelease?.();
+      }
+
       if (
         nextMode === "view" &&
         collabEnabled &&
@@ -185,6 +190,15 @@ export default function WorkSpace() {
           setCollabModeParam(nextMode);
         }, 200);
         return;
+      }
+
+      if (
+        nextMode === "view" &&
+        collabEnabled &&
+        collabConnection === "open" &&
+        collabEffectiveMode === "edit"
+      ) {
+        collabApiRef.current?.releaseEdit?.();
       }
 
       setCollabModeParam(nextMode);
@@ -280,7 +294,7 @@ export default function WorkSpace() {
       if (!message?.op) return;
 
       const incomingVersion = message.op?.version ?? 0;
-      if (incomingVersion && incomingVersion <= collabVersionRef.current) return;
+      if (incomingVersion && incomingVersion < collabVersionRef.current) return;
 
       if (incomingVersion) {
         collabVersionRef.current = incomingVersion;
@@ -450,22 +464,23 @@ export default function WorkSpace() {
               return;
             }
           }
-          if (d.database) {
-            setDatabase(d.database);
-          } else {
-            setDatabase(DB.GENERIC);
-          }
+          const nextDatabase = d.database ?? DB.GENERIC;
+          const resolvedDatabase = databases[nextDatabase]?.label
+            ? nextDatabase
+            : DB.GENERIC;
+          setDatabase(resolvedDatabase);
           setId(d.id);
           setGistId(d.gistId);
           setLoadedFromGistId(d.loadedFromGistId);
           setTitle(d.name);
-          setTables(d.tables);
-          setRelationships(d.references);
+          setTables(d.tables ?? []);
+          setRelationships(d.references ?? []);
           setNotes(d.notes ?? []);
           setAreas(d.subjectAreas ?? d.areas ?? []);
           setTasks(d.todos ?? []);
           setTransform({ pan: d.pan, zoom: d.zoom });
-          if (databases[database].hasTypes) {
+          const databaseMeta = databases[resolvedDatabase];
+          if (databaseMeta.hasTypes) {
             if (d.types) {
               setTypes(
                 d.types.map((t) =>
@@ -474,7 +489,7 @@ export default function WorkSpace() {
                     : {
                         ...t,
                         id: nanoid(),
-                        fields: t.fields.map((f) =>
+                        fields: (t.fields ?? []).map((f) =>
                           f.id ? f : { ...f, id: nanoid() },
                         ),
                       },
@@ -484,8 +499,11 @@ export default function WorkSpace() {
               setTypes([]);
             }
           }
-          if (databases[database].hasEnums) {
-            setEnums(d.enums.map((e) => (!e.id ? { ...e, id: nanoid() } : e)) ?? []);
+          if (databaseMeta.hasEnums) {
+            const nextEnums = Array.isArray(d.enums) ? d.enums : [];
+            setEnums(
+              nextEnums.map((e) => (!e.id ? { ...e, id: nanoid() } : e)),
+            );
           }
           window.name = `d ${d.id}`;
         } else {
@@ -511,17 +529,17 @@ export default function WorkSpace() {
               return;
             }
           }
-          if (diagram.database) {
-            setDatabase(diagram.database);
-          } else {
-            setDatabase(DB.GENERIC);
-          }
+          const nextDatabase = diagram.database ?? DB.GENERIC;
+          const resolvedDatabase = databases[nextDatabase]?.label
+            ? nextDatabase
+            : DB.GENERIC;
+          setDatabase(resolvedDatabase);
           setId(diagram.id);
           setGistId(diagram.gistId);
           setLoadedFromGistId(diagram.loadedFromGistId);
           setTitle(diagram.name);
-          setTables(diagram.tables);
-          setRelationships(diagram.references);
+          setTables(diagram.tables ?? []);
+          setRelationships(diagram.references ?? []);
           setAreas(diagram.subjectAreas ?? diagram.areas ?? []);
           setNotes(diagram.notes ?? []);
           setTasks(diagram.todos ?? []);
@@ -531,7 +549,8 @@ export default function WorkSpace() {
           });
           setUndoStack([]);
           setRedoStack([]);
-          if (databases[database].hasTypes) {
+          const databaseMeta = databases[resolvedDatabase];
+          if (databaseMeta.hasTypes) {
             if (diagram.types) {
               setTypes(
                 diagram.types.map((t) =>
@@ -540,7 +559,7 @@ export default function WorkSpace() {
                     : {
                         ...t,
                         id: nanoid(),
-                        fields: t.fields.map((f) =>
+                        fields: (t.fields ?? []).map((f) =>
                           f.id ? f : { ...f, id: nanoid() },
                         ),
                       },
@@ -550,10 +569,9 @@ export default function WorkSpace() {
               setTypes([]);
             }
           }
-          if (databases[database].hasEnums) {
-            setEnums(
-              diagram.enums.map((e) => (!e.id ? { ...e, id: nanoid() } : e)) ?? [],
-            );
+          if (databaseMeta.hasEnums) {
+            const nextEnums = Array.isArray(diagram.enums) ? diagram.enums : [];
+            setEnums(nextEnums.map((e) => (!e.id ? { ...e, id: nanoid() } : e)));
           }
           window.name = `d ${diagram.id}`;
         } else {
@@ -569,15 +587,15 @@ export default function WorkSpace() {
         .get(id)
         .then((diagram) => {
           if (diagram) {
-            if (diagram.database) {
-              setDatabase(diagram.database);
-            } else {
-              setDatabase(DB.GENERIC);
-            }
+            const nextDatabase = diagram.database ?? DB.GENERIC;
+            const resolvedDatabase = databases[nextDatabase]?.label
+              ? nextDatabase
+              : DB.GENERIC;
+            setDatabase(resolvedDatabase);
             setId(diagram.id);
             setTitle(diagram.title);
-            setTables(diagram.tables);
-            setRelationships(diagram.relationships);
+            setTables(diagram.tables ?? []);
+            setRelationships(diagram.relationships ?? []);
             setAreas(diagram.subjectAreas ?? diagram.areas ?? []);
             setTasks(diagram.todos ?? []);
             setNotes(diagram.notes ?? []);
@@ -587,7 +605,8 @@ export default function WorkSpace() {
             });
             setUndoStack([]);
             setRedoStack([]);
-            if (databases[database].hasTypes) {
+            const databaseMeta = databases[resolvedDatabase];
+            if (databaseMeta.hasTypes) {
               if (diagram.types) {
                 setTypes(
                   diagram.types.map((t) =>
@@ -596,7 +615,7 @@ export default function WorkSpace() {
                       : {
                           ...t,
                           id: nanoid(),
-                          fields: t.fields.map((f) =>
+                          fields: (t.fields ?? []).map((f) =>
                             f.id ? f : { ...f, id: nanoid() },
                           ),
                         },
@@ -606,12 +625,9 @@ export default function WorkSpace() {
                 setTypes([]);
               }
             }
-            if (databases[database].hasEnums) {
-              setEnums(
-                diagram.enums.map((e) =>
-                  !e.id ? { ...e, id: nanoid() } : e,
-                ) ?? [],
-              );
+            if (databaseMeta.hasEnums) {
+              const nextEnums = Array.isArray(diagram.enums) ? diagram.enums : [];
+              setEnums(nextEnums.map((e) => (!e.id ? { ...e, id: nanoid() } : e)));
             }
           } else {
             if (selectedDb === "") setShowSelectDbModal(true);
@@ -653,22 +669,33 @@ export default function WorkSpace() {
         } else {
           setRemoteMeta(null);
         }
-        const parsedDiagram = JSON.parse(data.files[SHARE_FILENAME].content);
+        const shareFile =
+          data?.files?.[SHARE_FILENAME] ?? data?.files?.[VERSION_FILENAME];
+        const content = shareFile?.content;
+        if (!content) {
+          throw new Error("Shared diagram is missing content");
+        }
+        const parsedDiagram = JSON.parse(content);
         setUndoStack([]);
         setRedoStack([]);
         setGistId(shareId);
         setLoadedFromGistId(shareId);
-        setDatabase(parsedDiagram.database);
-        setTitle(parsedDiagram.title);
-        setTables(parsedDiagram.tables);
-        setRelationships(parsedDiagram.relationships);
+        const nextDatabase = parsedDiagram.database ?? DB.GENERIC;
+        const resolvedDatabase = databases[nextDatabase]?.label
+          ? nextDatabase
+          : DB.GENERIC;
+        setDatabase(resolvedDatabase);
+        setTitle(parsedDiagram.title ?? "Untitled Diagram");
+        setTables(parsedDiagram.tables ?? []);
+        setRelationships(parsedDiagram.relationships ?? []);
         setNotes(parsedDiagram.notes ?? []);
         setAreas(parsedDiagram.subjectAreas ?? parsedDiagram.areas ?? []);
         setTasks(parsedDiagram.todos ?? []);
         setTransform(
           parsedDiagram.transform ?? { pan: { x: 0, y: 0 }, zoom: 1 },
         );
-        if (databases[parsedDiagram.database].hasTypes) {
+        const databaseMeta = databases[resolvedDatabase];
+        if (databaseMeta.hasTypes) {
           if (parsedDiagram.types) {
             setTypes(
               parsedDiagram.types.map((t) =>
@@ -677,7 +704,7 @@ export default function WorkSpace() {
                   : {
                       ...t,
                       id: nanoid(),
-                      fields: t.fields.map((f) =>
+                      fields: (t.fields ?? []).map((f) =>
                         f.id ? f : { ...f, id: nanoid() },
                       ),
                     },
@@ -687,11 +714,12 @@ export default function WorkSpace() {
             setTypes([]);
           }
         }
-        if (databases[parsedDiagram.database].hasEnums) {
+        if (databaseMeta.hasEnums) {
+          const nextEnums = Array.isArray(parsedDiagram.enums)
+            ? parsedDiagram.enums
+            : [];
           setEnums(
-            parsedDiagram.enums.map((e) =>
-              !e.id ? { ...e, id: nanoid() } : e,
-            ) ?? [],
+            nextEnums.map((e) => (!e.id ? { ...e, id: nanoid() } : e)),
           );
         }
       } catch (e) {
@@ -758,7 +786,6 @@ export default function WorkSpace() {
     setTypes,
     setTasks,
     setDatabase,
-    database,
     setEnums,
     selectedDb,
     setSaveState,
@@ -953,6 +980,19 @@ export default function WorkSpace() {
                 lastSaved={lastSaved}
                 setLastSaved={setLastSaved}
                 hideSaveState={Boolean(collabShareId)}
+                headerRight={
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <CollabStatus showClient />
+                    <CollabEditActions
+                      inline
+                      onSwitchToEdit={() => {
+                        userSelectedModeRef.current = true;
+                        setCollabModeParam("edit");
+                      }}
+                      onSwitchToView={() => handleCollabModeChange("view")}
+                    />
+                  </div>
+                }
                 collabMetadata={{
                   shareId: collabShareId,
                   lastModified: remoteMeta?.updatedAt,
@@ -967,17 +1007,6 @@ export default function WorkSpace() {
                   onPersistNow: () => collabApiRef.current?.persistNow?.(),
                 }}
               />
-            </div>
-            <div className="absolute right-2 top-1">
-              <div className="flex flex-col items-end gap-1">
-                <div className="flex items-center gap-2">
-                  <CollabModeToggle
-                    mode={collabMode}
-                    onChange={handleCollabModeChange}
-                  />
-                  <CollabStatus />
-                </div>
-              </div>
             </div>
           </div>
         </IdContext.Provider>
